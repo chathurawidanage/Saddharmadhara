@@ -1,0 +1,1 @@
+import { getPayload } from 'payload'; import config from './payload.config'; (async () => { const payload = await getPayload({ config }); const posts = await payload.find({ collection: 'posts', limit: 5 }); console.log(JSON.stringify(posts.docs.map(p => ({ title: p.title, slug: p.slug })), null, 2)); process.exit(0); })();
