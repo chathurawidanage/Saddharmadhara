@@ -19,7 +19,6 @@ import {
 import "./RetreatsDashboard.css";
 
 const getTypeColor = (type) => {
-  console.log("type", type);
   const normalizedType = type?.toLowerCase() || "";
   if (normalizedType.includes("silent")) return "#6610f2"; // Purple
   if (normalizedType.includes("general")) return "#28a745"; // Green

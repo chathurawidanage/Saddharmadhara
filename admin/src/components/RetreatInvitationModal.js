@@ -42,10 +42,14 @@ function getMessage(
   retreatFrom,
   retreatTo,
   deadLine,
+  retreatType,
 ) {
   // todo send in English for english retreats
   const plusDateTo = new Date(retreatTo);
   plusDateTo.setDate(plusDateTo.getDate() + 1);
+
+  const retreatPrefix = retreatType === "silent" ? "ස්වයං " : "";
+
   return `ඔබ ${retreatFrom.toLocaleDateString("si-LK", {
     year: "numeric",
     month: "short",
@@ -54,8 +58,7 @@ function getMessage(
     year: "numeric",
     month: "short",
     day: "numeric",
-  })} දක්වා පැවැත්වෙන සද්ධර්මධාරා
-භාවනා වැඩසටහන හා සම්බන්ධවීමට තේරී පත් ව ඇත. ${new Date(
+  })} දක්වා පැවැත්වෙන සද්ධර්මධාරා ${retreatPrefix}භාවනා වැඩසටහන හා සම්බන්ධවීමට තේරී පත් ව ඇත. ${new Date(
     deadLine,
   ).toLocaleDateString("si-LK", {
     year: "numeric",
@@ -134,9 +137,9 @@ const RetreatInvitationModal = observer(({ store, retreat, onCancel }) => {
 
           if (
             yogi.expressionOfInterests[retreat.code].invitationSent ===
-              "sent" ||
+            "sent" ||
             yogi.expressionOfInterests[retreat.code].invitationSent ===
-              "delivered"
+            "delivered"
           ) {
             sentYogisArr.push(yogi);
           } else if (
@@ -201,6 +204,7 @@ const RetreatInvitationModal = observer(({ store, retreat, onCancel }) => {
           retreat.date,
           retreat.endDate,
           confirmationDeadline,
+          retreat.retreatType
         ),
         finalYogisList[i].attributes[DHIS2_TEI_ATTRIBUTE_MOBILE],
         token,
@@ -301,6 +305,7 @@ const RetreatInvitationModal = observer(({ store, retreat, onCancel }) => {
                   retreat.date,
                   retreat.endDate,
                   confirmationDeadline,
+                  retreat.retreatType,
                 )}
               />
             </div>
