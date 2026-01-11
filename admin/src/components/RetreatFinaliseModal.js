@@ -38,7 +38,10 @@ const RetreatFinaliseModal = observer(({ store, retreat, onCancel }) => {
     useEffect(() => {
         (async () => {
             setLoading(true);
-            let yogiList = await store.yogis.fetchExpressionOfInterests(retreat.code);
+            let yogiList = await store.yogis.fetchExpressionOfInterests(
+                retreat.code,
+                retreat.name
+            );
 
             const yogiFetchPromises = yogiList.map(yogiId => {
                 return store.yogis.fetchYogi(yogiId);

@@ -80,7 +80,10 @@ const RetreatManager = observer(({ store }) => {
     selectionState,
     format,
   ) => {
-    const yogis = await store.yogis.fetchExpressionOfInterests(retreatCode);
+    const yogis = await store.yogis.fetchExpressionOfInterests(
+      retreatCode,
+      retreat.name,
+    );
     const yogiNames = [];
 
     if (format === "csv") {

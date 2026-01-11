@@ -158,6 +158,7 @@ const YogisList = observer(({ retreat, store }) => {
 
       const yogiIdList = await store.yogis.fetchExpressionOfInterests(
         retreat.code,
+        retreat.name,
       );
 
       let completion = 0;
@@ -223,7 +224,7 @@ const YogisList = observer(({ retreat, store }) => {
       (yogi) =>
         filters.reverend ||
         yogi.attributes[DHIS2_TEI_ATTRIBUTE_MARITAL_STATE].toLowerCase() !==
-          "reverend",
+        "reverend",
     );
 
   return (
@@ -309,7 +310,7 @@ const YogisList = observer(({ retreat, store }) => {
                           retreat={retreat}
                         />
                         {selectionState ===
-                        DHIS2_RETREAT_SELECTION_STATE_SELECTED_CODE ? (
+                          DHIS2_RETREAT_SELECTION_STATE_SELECTED_CODE ? (
                           <RoomSelect
                             store={store}
                             retreat={retreat}
@@ -318,7 +319,7 @@ const YogisList = observer(({ retreat, store }) => {
                           />
                         ) : null}
                         {selectionState ===
-                        DHIS2_RETREAT_SELECTION_STATE_SELECTED_CODE ? (
+                          DHIS2_RETREAT_SELECTION_STATE_SELECTED_CODE ? (
                           <AttendanceButton
                             store={store}
                             retreat={retreat}
@@ -326,7 +327,7 @@ const YogisList = observer(({ retreat, store }) => {
                           />
                         ) : null}
                         {selectionState ===
-                        DHIS2_RETREAT_SELECTION_STATE_PENDING_CONFIRMATION_CODE ? (
+                          DHIS2_RETREAT_SELECTION_STATE_PENDING_CONFIRMATION_CODE ? (
                           <InvitationIndicator
                             store={store}
                             retreat={retreat}
@@ -492,7 +493,7 @@ const StateChangeButton = ({ currentState, yogi, retreat, store }) => {
           { label: "Move", onClick: onMoveClicked },
           {
             label: "Don't Move",
-            onClick: () => {},
+            onClick: () => { },
           },
         ],
       };
@@ -685,7 +686,7 @@ const AttendanceButton = observer(({ yogi, retreat, store }) => {
 const InvitationIndicator = observer(({ yogi, retreat, store }) => {
   const [invitationSent, setInvitationSent] = useState(
     yogi.expressionOfInterests[retreat.code]?.invitationSent ||
-      "yet to be sent",
+    "yet to be sent",
   );
   return <div style={{ marginTop: 20 }}>✉️ Invitation {invitationSent}</div>;
 });
