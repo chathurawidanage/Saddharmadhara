@@ -7,6 +7,7 @@ import xml.etree.ElementTree as ET
 from dotenv import load_dotenv
 import email.utils
 from datetime import datetime
+import subprocess
 
 from botocore.exceptions import ClientError
 
@@ -29,6 +30,7 @@ PODCAST_SUBCATEGORY = os.getenv("PODCAST_SUBCATEGORY")
 PODCAST_IMAGE_URL = os.getenv("PODCAST_IMAGE_URL")
 PODCAST_EXPLICIT = os.getenv("PODCAST_EXPLICIT")
 PODCAST_EMAIL = os.getenv("PODCAST_EMAIL")
+PODCAST_DESCRIPTION_TEMPLATE = os.getenv("PODCAST_DESCRIPTION_TEMPLATE")
 
 required_podcast_vars = [
     ("PODCAST_TITLE", PODCAST_TITLE),
@@ -41,6 +43,7 @@ required_podcast_vars = [
     ("PODCAST_IMAGE_URL", PODCAST_IMAGE_URL),
     ("PODCAST_EXPLICIT", PODCAST_EXPLICIT),
     ("PODCAST_EMAIL", PODCAST_EMAIL),
+    ("PODCAST_DESCRIPTION_TEMPLATE", PODCAST_DESCRIPTION_TEMPLATE),
 ]
 
 missing_vars = [name for name, value in required_podcast_vars if not value]
@@ -65,21 +68,95 @@ s3_client = boto3.client(
 )
 
 
+def get_loudness_stats(input_file):
+    """Run FFmpeg first pass to measure loudness stats."""
+    cmd = [
+        "ffmpeg",
+        "-i",
+        input_file,
+        "-af",
+        "loudnorm=I=-19:TP=-1.5:LRA=11:print_format=json",
+        "-f",
+        "null",
+        "-",
+    ]
+    # Run and capture output. FFmpeg writes JSON to stderr.
+    result = subprocess.run(
+        cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True
+    )
+
+    # Extract JSON from stderr
+    output_lines = result.stderr.splitlines()
+    json_lines = []
+    capture = False
+    for line in output_lines:
+        if line.strip() == "{":
+            capture = True
+        if capture:
+            json_lines.append(line)
+        if line.strip() == "}":
+            break
+
+    if not json_lines:
+        print(f"Warning: Could not extract loudness stats for {input_file}")
+        return None
+
+    try:
+        return json.loads("".join(json_lines))
+    except json.JSONDecodeError:
+        print(f"Warning: Failed to parse loudness JSON for {input_file}")
+        return None
+
+
+def convert_audio_2pass(input_file, output_file):
+    """Convert audio using measured loudness stats (2nd pass)."""
+    stats = get_loudness_stats(input_file)
+
+    # Base filter options
+    loudnorm_filter = "loudnorm=I=-19:TP=-1.5:LRA=11"
+
+    # If stats were successfully captured, switch to linear mode (2-pass)
+    if stats:
+        loudnorm_filter += (
+            f":measured_I={stats['input_i']}"
+            f":measured_LRA={stats['input_lra']}"
+            f":measured_TP={stats['input_tp']}"
+            f":measured_thresh={stats['input_thresh']}"
+            f":offset={stats['target_offset']}"
+            ":linear=true"
+        )
+    else:
+        print("Fallback: Using single-pass dynamic normalization.")
+
+    cmd = [
+        "ffmpeg",
+        "-i",
+        input_file,
+        "-ac",
+        "1",  # Mono
+        "-ar",
+        "44100",  # 44.1kHz
+        "-b:a",
+        "64k",  # 64kbps (Recommended for Speech)
+        "-af",
+        loudnorm_filter,
+        "-y",  # Overwrite
+        output_file,
+    ]
+
+    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+
+
 def download_and_upload(video_url):
     # 1. Download Options
     ydl_opts = {
         "format": "bestaudio/best",
-        "outtmpl": "%(id)s.%(ext)s",  # Name file as VideoID.mp3
-        "postprocessors": [
-            {
-                "key": "FFmpegExtractAudio",
-                "preferredcodec": "mp3",
-                "preferredquality": "192",
-            }
-        ],
+        "outtmpl": "%(id)s_raw.%(ext)s",
+        "quiet": True,
     }
 
-    filename = None
+    raw_filename = None
+    final_filename = None
     metadata_filename = None
     title = "No Title"
     description = ""
@@ -91,10 +168,18 @@ def download_and_upload(video_url):
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(video_url, download=True)
             video_id = info["id"]
-            filename = f"{video_id}.mp3"
+
+            # yt-dlp prepare_filename might depend on merged format vs single format
+            raw_filename = ydl.prepare_filename(info)
+
+            final_filename = f"{video_id}.mp3"
             metadata_filename = f"{video_id}.json"
             title = info.get("title", "No Title")
-            description = ""
+
+            # Format Description from Template
+            desc_template = PODCAST_DESCRIPTION_TEMPLATE
+            desc_template = desc_template.replace(r"\n", "\n")
+            description = desc_template.format(title=title, original_url=video_url)
             upload_date_str = info.get("upload_date", "")
             duration = info.get("duration", 0)
 
@@ -111,19 +196,29 @@ def download_and_upload(video_url):
             # Thumbnail extraction
             thumbnail_url = info.get("thumbnail")
 
-        if filename and os.path.exists(filename):
+        if raw_filename and os.path.exists(raw_filename):
+            print(f"Processing audio: {raw_filename} -> {final_filename}")
+            try:
+                convert_audio_2pass(raw_filename, final_filename)
+            except Exception as e:
+                print(f"Error during ffmpeg conversion: {e}")
+                return None
+
             # Get file size
-            file_size = os.path.getsize(filename)
+            file_size = os.path.getsize(final_filename)
 
             # 2. Upload Audio to S3
-            print(f"Uploading {filename} to S3...")
+            print(f"Uploading {final_filename} to S3...")
             s3_client.upload_file(
-                filename, S3_BUCKET, filename, ExtraArgs={"ContentType": "audio/mpeg"}
+                final_filename,
+                S3_BUCKET,
+                final_filename,
+                ExtraArgs={"ContentType": "audio/mpeg"},
             )
 
             # 3. Generate Public URL
             base_url = f"{S3_ENDPOINT_URL}/{S3_BUCKET}"
-            s3_url = f"{base_url}/{filename}"
+            s3_url = f"{base_url}/{final_filename}"
 
             # 3.5 Process Thumbnail
             s3_image_url = None
@@ -188,24 +283,17 @@ def download_and_upload(video_url):
                 "pub_date": pub_date,
             }
         else:
-            print(f"Expected file {filename} not found after download.")
+            print(f"Expected file {raw_filename} not found after download.")
             return None
 
     finally:
         # Clean up local files
-        if filename and os.path.exists(filename):
-            try:
-                os.remove(filename)
-                print(f"Deleted local file: {filename}")
-            except OSError as e:
-                print(f"Error removing {filename}: {e}")
-
-        if metadata_filename and os.path.exists(metadata_filename):
-            try:
-                os.remove(metadata_filename)
-                print(f"Deleted local file: {metadata_filename}")
-            except OSError as e:
-                print(f"Error removing {metadata_filename}: {e}")
+        for fPath in [raw_filename, final_filename, metadata_filename]:
+            if fPath and os.path.exists(fPath):
+                try:
+                    os.remove(fPath)
+                except OSError:
+                    pass
 
         # Cleanup image
         image_filename_cleanup = f"{video_id}.jpg" if "video_id" in locals() else None
@@ -486,7 +574,7 @@ def run_sync_workflow():
         result = process_video_task(item)
         if result:
             processed_items.append(result)
-            if len(processed_items) >= 2:
+            if len(processed_items) >= 1:
                 break
 
     # 3. Update Feed
