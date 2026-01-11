@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 import email.utils
 from datetime import datetime
 import subprocess
+import concurrent.futures
 
 from botocore.exceptions import ClientError
 
@@ -70,10 +71,15 @@ s3_client = boto3.client(
 
 def get_loudness_stats(input_file):
     """Run FFmpeg first pass to measure loudness stats."""
+    safe_input = (
+        f"./{input_file}"
+        if not os.path.isabs(input_file) and not input_file.startswith("./")
+        else input_file
+    )
     cmd = [
         "ffmpeg",
         "-i",
-        input_file,
+        safe_input,
         "-af",
         "loudnorm=I=-19:TP=-1.5:LRA=11:print_format=json",
         "-f",
@@ -128,10 +134,22 @@ def convert_audio_2pass(input_file, output_file):
     else:
         print("Fallback: Using single-pass dynamic normalization.")
 
+    # Ensure file paths are safe for FFmpeg (handle filenames starting with -)
+    safe_input = (
+        f"./{input_file}"
+        if not os.path.isabs(input_file) and not input_file.startswith("./")
+        else input_file
+    )
+    safe_output = (
+        f"./{output_file}"
+        if not os.path.isabs(output_file) and not output_file.startswith("./")
+        else output_file
+    )
+
     cmd = [
         "ffmpeg",
         "-i",
-        input_file,
+        safe_input,
         "-ac",
         "1",  # Mono
         "-ar",
@@ -141,7 +159,7 @@ def convert_audio_2pass(input_file, output_file):
         "-af",
         loudnorm_filter,
         "-y",  # Overwrite
-        output_file,
+        safe_output,
     ]
 
     subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
@@ -178,7 +196,9 @@ def download_and_upload(video_url):
 
             # Format Description from Template
             desc_template = PODCAST_DESCRIPTION_TEMPLATE
-            desc_template = desc_template.replace(r"\n", "\n")
+            # Handle literal \n text (common in .env) and assume standard newlines are already parsed
+            desc_template = desc_template.replace(r"\n", "\n").replace(r"\\n", "\n")
+
             description = desc_template.format(title=title, original_url=video_url)
             upload_date_str = info.get("upload_date", "")
             duration = info.get("duration", 0)
@@ -317,39 +337,77 @@ def format_duration(seconds):
         return f"{m:02d}:{s:02d}"
 
 
+def fetch_all_bucket_metadata():
+    """Fetches all .json metadata files from S3 bucket."""
+    print("Fetching all metadata files from S3...")
+
+    paginator = s3_client.get_paginator("list_objects_v2")
+    pages = paginator.paginate(Bucket=S3_BUCKET)
+
+    json_keys = []
+    for page in pages:
+        if "Contents" in page:
+            for obj in page["Contents"]:
+                key = obj["Key"]
+                if key.endswith(".json"):
+                    json_keys.append(key)
+
+    print(f"Found {len(json_keys)} metadata files. Downloading content...")
+
+    items = []
+
+    def fetch_one(key):
+        try:
+            resp = s3_client.get_object(Bucket=S3_BUCKET, Key=key)
+            content = resp["Body"].read().decode("utf-8")
+            data = json.loads(content)
+
+            # Map storage fields to RSS fields
+            data["url"] = data.get("s3_audio_url")
+            data["image_url"] = data.get("s3_image_url")
+            return data
+        except Exception as e:
+            print(f"Error reading {key}: {e}")
+            return None
+
+    # Use parallel download for speed
+    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+        results = executor.map(fetch_one, json_keys)
+
+    for res in results:
+        if res:
+            items.append(res)
+
+    # Sort items by pub_date descending (Newest first)
+    def parse_date(item):
+        date_str = item.get("pub_date", "")
+        if not date_str:
+            return datetime.min
+        try:
+            return email.utils.parsedate_to_datetime(date_str)
+        except:
+            return datetime.min
+
+    items.sort(key=parse_date, reverse=True)
+    return items
+
+
 def generate_rss(items):
+    """Generates podcast.xml from scratch using the provided list of items."""
     local_filename = "podcast.xml"
 
     # Register namespaces
     ET.register_namespace("itunes", "http://www.itunes.com/dtds/podcast-1.0.dtd")
 
-    # 1. Download existing or create new
-    try:
-        s3_client.download_file(S3_BUCKET, local_filename, local_filename)
-        tree = ET.parse(local_filename)
-        root = tree.getroot()
-        channel = root.find("channel")
-        print("Downloaded existing podcast.xml")
-    except ClientError as e:
-        error_code = e.response["Error"]["Code"]
-        if error_code == "404" or error_code == "NoSuchKey":
-            print("No existing podcast.xml found. Creating new.")
-            root = ET.Element("rss")
-            root.set("version", "2.0")
-            channel = ET.SubElement(root, "channel")
-            tree = ET.ElementTree(root)
-        else:
-            print(f"Error downloading podcast.xml: {e}")
-            raise e
-    except Exception as e:
-        print(f"Error parsing existing podcast.xml: {e}")
-        raise e
+    # Create Root
+    root = ET.Element("rss")
+    root.set("version", "2.0")
+    channel = ET.SubElement(root, "channel")
+    tree = ET.ElementTree(root)
 
-    # --- Update Channel Metadata (Always sync with .env) ---
+    # --- Channel Metadata (From .env) ---
     def update_tag(parent, tag, text=None, attrib=None):
-        el = parent.find(tag)
-        if el is None:
-            el = ET.SubElement(parent, tag)
+        el = ET.SubElement(parent, tag)
         if text is not None:
             el.text = text
         if attrib:
@@ -373,13 +431,8 @@ def generate_rss(items):
         PODCAST_EXPLICIT,
     )
 
-    # iTunes Owner (Complex Type - Remove and Recreate to be safe)
-    owner_tag = "{http://www.itunes.com/dtds/podcast-1.0.dtd}owner"
-    existing_owner = channel.find(owner_tag)
-    if existing_owner is not None:
-        channel.remove(existing_owner)
-
-    owner = ET.SubElement(channel, owner_tag)
+    # iTunes Owner
+    owner = ET.SubElement(channel, "{http://www.itunes.com/dtds/podcast-1.0.dtd}owner")
     ET.SubElement(
         owner, "{http://www.itunes.com/dtds/podcast-1.0.dtd}name"
     ).text = PODCAST_AUTHOR
@@ -387,46 +440,42 @@ def generate_rss(items):
         owner, "{http://www.itunes.com/dtds/podcast-1.0.dtd}email"
     ).text = PODCAST_EMAIL
 
-    # iTunes Category (Complex Type - Remove and Recreate)
-    cat_tag = "{http://www.itunes.com/dtds/podcast-1.0.dtd}category"
-    for cat in channel.findall(cat_tag):
-        channel.remove(cat)
-
-    category = ET.SubElement(channel, cat_tag)
+    # iTunes Category
+    category = ET.SubElement(
+        channel, "{http://www.itunes.com/dtds/podcast-1.0.dtd}category"
+    )
     category.set("text", PODCAST_CATEGORY)
-    ET.SubElement(category, cat_tag).set("text", PODCAST_SUBCATEGORY)
+    if PODCAST_SUBCATEGORY:
+        ET.SubElement(
+            category, "{http://www.itunes.com/dtds/podcast-1.0.dtd}category"
+        ).set("text", PODCAST_SUBCATEGORY)
 
     # iTunes Image
-    img_tag = "{http://www.itunes.com/dtds/podcast-1.0.dtd}image"
-    update_tag(channel, img_tag, attrib={"href": PODCAST_IMAGE_URL})
+    update_tag(
+        channel,
+        "{http://www.itunes.com/dtds/podcast-1.0.dtd}image",
+        attrib={"href": PODCAST_IMAGE_URL},
+    )
 
-    # 2. Identify insertion point (after channel details, before first item)
-    insert_index = -1
-    existing_guids = set()
-
-    # Scan for existing items and insertion point
-    for i, child in enumerate(channel):
-        if child.tag == "item":
-            if insert_index == -1:
-                insert_index = i
-            guid = child.find("guid")
-            if guid is not None:
-                existing_guids.add(guid.text)
-
-    if insert_index == -1:
-        insert_index = len(channel)
-
-    # 3. Add new items
+    # --- Items ---
     for item in items:
-        # Check against both ID and URL to handle potential legacy cases or mixed usage
-        if item.get("id") in existing_guids or item["url"] in existing_guids:
-            print(f"Item already in RSS, skipping: {item['title']}")
+        # Check basic validity
+        if not item.get("url"):
             continue
 
-        print(f"Adding to RSS: {item['title']}")
         rss_item = ET.Element("item")
-        ET.SubElement(rss_item, "title").text = item["title"]
-        ET.SubElement(rss_item, "description").text = item["description"]
+        ET.SubElement(rss_item, "title").text = item.get("title", "No Title")
+
+        # Description with HTML support (CDATA)
+        # Convert newlines to HTML line breaks for the description
+        raw_desc = item.get("description", "")
+        if raw_desc:
+            html_desc = raw_desc.replace("\n", "<br />")
+            # We use tokens for CDATA post-processing
+            cdata_desc = f"%%CDATA_START%%{html_desc}%%CDATA_END%%"
+            ET.SubElement(rss_item, "description").text = cdata_desc
+        else:
+            ET.SubElement(rss_item, "description").text = ""
 
         enclosure = ET.SubElement(rss_item, "enclosure")
         enclosure.set("url", item["url"])
@@ -434,9 +483,7 @@ def generate_rss(items):
         enclosure.set("length", str(item.get("length_bytes", 0)))
 
         guid = ET.SubElement(rss_item, "guid")
-        guid.text = item.get(
-            "id", item["url"]
-        )  # Fallback to URL if ID missing (shouldn't happen)
+        guid.text = item.get("id", item["url"])
         guid.set("isPermaLink", "false")
 
         # Spotify/iTunes Tags
@@ -455,12 +502,26 @@ def generate_rss(items):
             )
             img.set("href", item["image_url"])
 
-        # Insert at the calculated index and increment to maintain order of new batch
-        channel.insert(insert_index, rss_item)
-        insert_index += 1
+        channel.append(rss_item)
 
-    # 4. Write and Upload
+    # 4. Write and Upload (with CDATA post-processing)
     tree.write(local_filename, encoding="UTF-8", xml_declaration=True)
+
+    # Post-process to restore CDATA
+    try:
+        with open(local_filename, "r", encoding="UTF-8") as f:
+            xml_content = f.read()
+
+        xml_content = xml_content.replace("%%CDATA_START%%", "<![CDATA[")
+        xml_content = xml_content.replace("%%CDATA_END%%", "]]>")
+        xml_content = xml_content.replace("&lt;br /&gt;", "<br />")
+
+        # Write back
+        with open(local_filename, "w", encoding="UTF-8") as f:
+            f.write(xml_content)
+
+    except Exception as e:
+        print(f"Error post-processing XML for CDATA: {e}")
 
     try:
         s3_client.upload_file(
@@ -526,12 +587,6 @@ def get_channel_videos_yt_dlp(channel_url):
 # --- TASKS ---
 
 
-def get_video_items_task(channel_url):
-    """Task: Fetch video items from Channel URL using yt-dlp."""
-    print(f"Fetching videos from {channel_url}...")
-    return get_channel_videos_yt_dlp(channel_url)
-
-
 def process_video_task(video_item):
     """Task: Process a single video item (check, download, upload)."""
     video_id = video_item["id"]
@@ -549,10 +604,11 @@ def process_video_task(video_item):
         return None
 
 
-def update_rss_feed_task(processed_items):
-    """Task: Update and upload the podcast RSS feed."""
-    print("Updating RSS feed metadata and content...")
-    generate_rss(processed_items or [])
+def update_rss_feed_task():
+    """Task: Update and upload the podcast RSS feed based on ALL bucket content."""
+    print("Rebuilding RSS feed from full bucket history...")
+    all_items = fetch_all_bucket_metadata()
+    generate_rss(all_items)
 
 
 # --- WORKFLOW ---
@@ -564,21 +620,37 @@ def run_sync_workflow():
         print("Error: YOUTUBE_CHANNEL_URL not set in .env")
         return
 
-    # 1. Get items
-    video_items = get_video_items_task(channel_url)
+    # 1. Get items generator
+    print(f"Fetching videos from {channel_url}...")
+    video_items_gen = get_channel_videos_yt_dlp(channel_url)
 
-    processed_items = []
+    max_workers = os.cpu_count() or 4
+    print(f"Starting parallel processing with {max_workers} workers...")
 
-    # 2. Process items (Limit to 1 per execution as requested)
-    for item in video_items:
-        result = process_video_task(item)
-        if result:
-            processed_items.append(result)
-            if len(processed_items) >= 1:
-                break
+    processed_count = 0
 
-    # 3. Update Feed
-    update_rss_feed_task(processed_items)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = []
+
+        for item in video_items_gen:
+            # Submit immediately.
+            # process_video_task handles the check_if_exists logic internally.
+            futures.append(executor.submit(process_video_task, item))
+
+        # Monitor completion
+        for future in concurrent.futures.as_completed(futures):
+            try:
+                result = future.result()
+                if result:
+                    processed_count += 1
+            except Exception as exc:
+                print(f"A task generated an exception: {exc}")
+
+    print(f"Processing complete. {processed_count} new items processed.")
+
+    # 3. Update Feed (Always Rebuild from S3 to Ensure Consistency)
+    # Even if no new items, we might want to ensure RSS is fresh/consistent with Bucket state
+    update_rss_feed_task()
 
 
 if __name__ == "__main__":
