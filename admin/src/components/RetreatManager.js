@@ -169,7 +169,7 @@ const RetreatManager = observer(({ store }) => {
                     <FlyoutMenu>
                       <MenuItem label="Applied">
                         {["Male", "Female"].map((gender) => (
-                          <MenuItem label={gender}>
+                          <MenuItem label={gender} key={gender}>
                             <MenuItem
                               label="Name List (Text)"
                               onClick={() => {
@@ -197,7 +197,7 @@ const RetreatManager = observer(({ store }) => {
                       </MenuItem>
                       <MenuItem label="Pending Confirmation">
                         {["Male", "Female"].map((gender) => (
-                          <MenuItem label={gender}>
+                          <MenuItem label={gender} key={gender}>
                             <MenuItem
                               label="Name List (Text)"
                               onClick={() => {
@@ -225,7 +225,7 @@ const RetreatManager = observer(({ store }) => {
                       </MenuItem>
                       <MenuItem label="Selected">
                         {["Male", "Female"].map((gender) => (
-                          <MenuItem label={gender}>
+                          <MenuItem label={gender} key={gender}>
                             <MenuItem
                               label="Name List (Text)"
                               onClick={() => {
@@ -253,7 +253,7 @@ const RetreatManager = observer(({ store }) => {
                       </MenuItem>
                       <MenuItem label="Waiting">
                         {["Male", "Female"].map((gender) => (
-                          <MenuItem label={gender}>
+                          <MenuItem label={gender} key={gender}>
                             <MenuItem
                               label="Name List (Text)"
                               onClick={() => {
