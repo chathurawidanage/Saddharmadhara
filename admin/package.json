@@ -14,6 +14,7 @@
     "deploy": "d2-app-scripts deploy"
   },
   "devDependencies": {
+    "@babel/plugin-proposal-private-property-in-object": "^7.21.11",
     "@babel/plugin-syntax-dynamic-import": "^7.8.3",
     "@dhis2/cli-app-scripts": "^11.7.5"
   },
