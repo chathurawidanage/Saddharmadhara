@@ -43,6 +43,7 @@
 .special-comments {
     display: flex;
     column-gap: 2px;
+    flex-wrap: wrap;
 }
 
 .profile-info {

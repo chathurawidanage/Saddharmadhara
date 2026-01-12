@@ -252,6 +252,15 @@ class MetadataStore {
     }
   };
 
+  loadRetreats = async () => {
+    let response = await this.engine.query({
+      retreats: metadataQuery.retreats,
+    });
+    runInAction(() => {
+      this.retreats = transformRetreats(response.retreats);
+    });
+  };
+
   init = async () => {
     let response = await this.engine.query(metadataQuery);
     runInAction(() => {

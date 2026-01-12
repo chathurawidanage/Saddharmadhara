@@ -16,12 +16,18 @@ import {
   SingleSelectOption,
   Tab,
   TabBar,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableCellHead,
+  TableRow,
+  TableRowHead,
   TextAreaField,
 } from "@dhis2/ui";
 import { computed } from "mobx";
 import { observer } from "mobx-react";
 import React, { useEffect, useState } from "react";
-import { ProgressBar, Table } from "react-bootstrap";
 import {
   DHIS2_RETREAT_SELECTION_STATE_PENDING_CONFIRMATION_CODE,
   DHIS2_RETREAT_SELECTION_STATE_SELECTED_CODE,
@@ -232,7 +238,6 @@ const YogisList = observer(({ retreat, store }) => {
       <div className="yogi-list-top-bar">
         <YogiFilter filters={filters} setFilters={setFilters} />
         <SingleSelectField
-          dense
           placeholder="Sort"
           prefix="Sort"
           onChange={(e) => {
@@ -247,11 +252,7 @@ const YogisList = observer(({ retreat, store }) => {
           />
           <SingleSelectOption value={AGE_SORT} label="Age" />
         </SingleSelectField>
-        <SelectionProgressBar
-          yogiList={yogiList}
-          retreat={retreat}
-          className="yogi-selection-progress"
-        />
+
       </div>
       <div>
         <TabBar>
@@ -273,74 +274,76 @@ const YogisList = observer(({ retreat, store }) => {
       <div>
         <div>
           {pagination(filteredYogis.length)}
-          <Table bordered hover className="yogi-table">
-            <thead>
-              <tr>
-                <th width="40%">Profile</th>
-                <th>Indicators</th>
-                <th width="250px">Applications</th>
-                <th>Partiticipation</th>
-                {!retreat.finalized && <th width="180px">Action</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {filteredYogis.map((yogi, index) => {
-                // pagination
-                if (
-                  !(
-                    index >= (currentPage - 1) * pageSize &&
-                    index < currentPage * pageSize
-                  )
-                ) {
-                  return null;
-                }
+          <div className="yogi-table-container">
+            <Table className="yogi-table">
+              <TableHead>
+                <TableRowHead>
+                  <TableCellHead>Profile</TableCellHead>
+                  <TableCellHead width="100px">Indicators</TableCellHead>
+                  <TableCellHead width="250px">Applications</TableCellHead>
+                  <TableCellHead width="150px">Partiticipation</TableCellHead>
+                  {!retreat.finalized && <TableCellHead width="160px">Action</TableCellHead>}
+                </TableRowHead>
+              </TableHead>
+              <TableBody>
+                {filteredYogis.map((yogi, index) => {
+                  // pagination
+                  if (
+                    !(
+                      index >= (currentPage - 1) * pageSize &&
+                      index < currentPage * pageSize
+                    )
+                  ) {
+                    return null;
+                  }
 
-                return (
-                  <YogiRow
-                    trackedEntity={yogi}
-                    key={yogi.id}
-                    currentRetreat={retreat}
-                    store={store}
-                    actions={
-                      <>
-                        <StateChangeButton
-                          store={store}
-                          yogi={yogi}
-                          currentState={selectionState}
-                          retreat={retreat}
-                        />
-                        {selectionState ===
-                          DHIS2_RETREAT_SELECTION_STATE_SELECTED_CODE ? (
-                          <RoomSelect
+                  return (
+                    <YogiRow
+                      trackedEntity={yogi}
+                      key={yogi.id}
+                      currentRetreat={retreat}
+                      store={store}
+                      actions={
+                        <>
+                          <StateChangeButton
                             store={store}
-                            retreat={retreat}
                             yogi={yogi}
-                            allYogis={yogiList}
-                          />
-                        ) : null}
-                        {selectionState ===
-                          DHIS2_RETREAT_SELECTION_STATE_SELECTED_CODE ? (
-                          <AttendanceButton
-                            store={store}
+                            currentState={selectionState}
                             retreat={retreat}
-                            yogi={yogi}
                           />
-                        ) : null}
-                        {selectionState ===
-                          DHIS2_RETREAT_SELECTION_STATE_PENDING_CONFIRMATION_CODE ? (
-                          <InvitationIndicator
-                            store={store}
-                            retreat={retreat}
-                            yogi={yogi}
-                          />
-                        ) : null}
-                      </>
-                    }
-                  />
-                );
-              })}
-            </tbody>
-          </Table>
+                          {selectionState ===
+                            DHIS2_RETREAT_SELECTION_STATE_SELECTED_CODE ? (
+                            <RoomSelect
+                              store={store}
+                              retreat={retreat}
+                              yogi={yogi}
+                              allYogis={yogiList}
+                            />
+                          ) : null}
+                          {selectionState ===
+                            DHIS2_RETREAT_SELECTION_STATE_SELECTED_CODE ? (
+                            <AttendanceButton
+                              store={store}
+                              retreat={retreat}
+                              yogi={yogi}
+                            />
+                          ) : null}
+                          {selectionState ===
+                            DHIS2_RETREAT_SELECTION_STATE_PENDING_CONFIRMATION_CODE ? (
+                            <InvitationIndicator
+                              store={store}
+                              retreat={retreat}
+                              yogi={yogi}
+                            />
+                          ) : null}
+                        </>
+                      }
+                    />
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
           {pagination(filteredYogis.length)}
         </div>
       </div>
@@ -348,78 +351,7 @@ const YogisList = observer(({ retreat, store }) => {
   );
 });
 
-const SelectionProgressBar = observer(({ yogiList, retreat, className }) => {
-  const yogiCounts = computed(() => {
-    let yogiCounts = {
-      reverendMale: 0,
-      reverendFemale: 0,
-      male: 0,
-      female: 0,
-    };
-    yogiList.forEach((yogi) => {
-      let state = yogi.expressionOfInterests[retreat.code]?.state;
-      if (state === "selected") {
-        if (yogi.attributes[DHIS2_TEI_ATTRIBUTE_MARITAL_STATE] === "reverend") {
-          if (
-            yogi.attributes[DHIS2_TEI_ATTRIBUTE_GENDER].toLowerCase() === "male"
-          ) {
-            yogiCounts.reverendMale++;
-          } else {
-            yogiCounts.reverendFemale++;
-          }
-        } else if (
-          yogi.attributes[DHIS2_TEI_ATTRIBUTE_GENDER].toLowerCase() === "male"
-        ) {
-          yogiCounts.male++;
-        } else {
-          yogiCounts.female++;
-        }
-      }
-    });
-    return yogiCounts;
-  }).get();
 
-  let remaining =
-    retreat.totalYogis -
-    yogiCounts.female -
-    yogiCounts.male -
-    yogiCounts.reverendMale -
-    yogiCounts.reverendFemale;
-
-  const toPercentage = (val) => {
-    return (100 * val) / retreat.totalYogis;
-  };
-
-  return (
-    <ProgressBar className={className}>
-      <ProgressBar
-        className="selection-progress-reverend-male"
-        now={toPercentage(yogiCounts.reverendMale)}
-        key={1}
-        label={yogiCounts.reverendMale}
-      />
-      <ProgressBar
-        className="selection-progress-male"
-        now={toPercentage(yogiCounts.male)}
-        key={2}
-        label={yogiCounts.male}
-      />
-      {/* <ProgressBar className="selection-progress-reverend-female" now={toPercentage(yogiCounts.reverendFemale)} key={1} label={yogiCounts.reverendFemale} /> */}
-      <ProgressBar
-        className="selection-progress-female"
-        now={toPercentage(yogiCounts.female + yogiCounts.reverendFemale)}
-        key={3}
-        label={yogiCounts.female + yogiCounts.reverendFemale}
-      />
-      <ProgressBar
-        className="selection-progress-remaining"
-        now={toPercentage(Math.max(0, remaining))}
-        key={4}
-        label={remaining}
-      />
-    </ProgressBar>
-  );
-});
 
 const YogiFilter = ({ filters, setFilters }) => {
   return (

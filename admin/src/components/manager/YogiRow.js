@@ -1,6 +1,8 @@
 import { useConfig } from "@dhis2/app-runtime";
 import {
-    Button
+    Button,
+    TableRow,
+    TableCell
 } from "@dhis2/ui";
 import { observer } from "mobx-react";
 import {
@@ -36,7 +38,8 @@ const styles = {
         display: "flex",
         columnGap: 2,
         rowGap: 2,
-        flexDirection: "row"
+        flexDirection: "row",
+        flexWrap: "wrap"
     }
 }
 
@@ -50,8 +53,8 @@ const YogiRow = observer(({ trackedEntity, currentRetreat, actions, store }) => 
     }
 
     return (
-        <tr className={rowClassNames.join(" ")} key={trackedEntity.id}>
-            <td className="yogi-row-td">
+        <TableRow className={rowClassNames.join(" ")} key={trackedEntity.id}>
+            <TableCell className="yogi-row-td">
                 <div className="yogi-name-row">
                     {trackedEntity.attributes[DHIS2_TEI_ATTRIBUTE_FULL_NAME]}
                     <Button
@@ -79,8 +82,8 @@ const YogiRow = observer(({ trackedEntity, currentRetreat, actions, store }) => 
                 <div>
                     <NotesIndicator trackedEntity={trackedEntity} />
                 </div>
-            </td>
-            <td className="yogi-row-td">
+            </TableCell>
+            <TableCell className="yogi-row-td">
                 <div style={styles.miniIndicators}>
                     <GenderIndicator gender={trackedEntity.attributes[DHIS2_TEI_ATTRIBUTE_GENDER]} />
                     <HasKidsIndicator hasKids={trackedEntity.attributes[DHIS2_TEI_ATTRIBUTE_HAS_KIDS]}
@@ -93,19 +96,21 @@ const YogiRow = observer(({ trackedEntity, currentRetreat, actions, store }) => 
                         comment={trackedEntity.attributes[DHIS2_TEI_ATTRIBUTE_HAS_STRESS_COMMENT]} />
                     <SpecialCommentsIndicator trackedEntity={trackedEntity} />
                 </div>
-            </td>
-            <td className="yogi-row-td">
+            </TableCell>
+            <TableCell className="yogi-row-td">
                 <ActiveApplicationIndicator currentRetreat={currentRetreat} trackedEntity={trackedEntity} store={store} />
-            </td>
-            <td className="yogi-row-td">
+            </TableCell>
+            <TableCell className="yogi-row-td">
                 <ParticipationIndicator trackedEntity={trackedEntity} store={store} />
-            </td>
+            </TableCell>
             {!currentRetreat.finalized && (
-                <td className="yogi-row-td yogi-row-actions">
-                    {actions}
-                </td>
+                <TableCell className="yogi-row-td">
+                    <div className="yogi-row-actions">
+                        {actions}
+                    </div>
+                </TableCell>
             )}
-        </tr>
+        </TableRow>
     );
 });
 

@@ -4,9 +4,7 @@
     margin-top: 5px;
 }
 
-.yogi-table {
-    margin-bottom: 0;
-}
+
 
 .selection-progress-reverend-male {
     background: repeating-linear-gradient(45deg,
@@ -37,7 +35,7 @@
     display: flex;
     column-gap: 20px;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
 }
 
 .yogi-selection-progress {
@@ -58,4 +56,33 @@
     display: flex;
     flex-direction: row;
     gap: 10px;
+}
+
+/* Add column separators */
+.yogi-table {
+    table-layout: fixed;
+    width: 100%;
+    margin-bottom: 0;
+}
+
+.yogi-table th,
+.yogi-table td {
+    border-right: 1px solid #e0e0e0;
+}
+
+/* Explicit column widths */
+.yogi-table th:nth-child(2) {
+    width: 100px;
+}
+
+.yogi-table th:nth-child(3) {
+    width: 300px;
+}
+
+.yogi-table th:nth-child(4) {
+    width: 200px;
+}
+
+.yogi-table th:nth-child(5) {
+    width: 160px;
 }
