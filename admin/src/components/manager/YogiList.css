@@ -38,6 +38,10 @@
     justify-content: flex-start;
 }
 
+.yogi-list-top-bar button[data-test="dhis2-uicore-dropdownbutton-toggle"] {
+    height: 40px !important;
+}
+
 .yogi-selection-progress {
     flex-grow: 1;
 }
