@@ -5,6 +5,7 @@ import {
   Checkbox,
   DropdownButton,
   FlyoutMenu,
+  InputField,
   LinearLoader,
   MenuItem,
   Modal,
@@ -23,6 +24,7 @@ import {
   TableCellHead,
   TableRow,
   TableRowHead,
+  Tag,
   TextAreaField,
 } from "@dhis2/ui";
 import { computed } from "mobx";
@@ -35,6 +37,9 @@ import {
   DHIS2_TEI_ATTRIBUTE_FULL_NAME,
   DHIS2_TEI_ATTRIBUTE_GENDER,
   DHIS2_TEI_ATTRIBUTE_MARITAL_STATE,
+  DHIS2_TEI_ATTRIBUTE_MOBILE,
+  DHIS2_TEI_ATTRIBUTE_NIC,
+  DHIS2_TEI_ATTRIBUTE_PASSPORT,
   DHIS2_TEI_ATTRIBUTE_YOGI_PRIORITY,
 } from "../../dhis2";
 import GenderIndicator from "../indicators/GenderIndicator";
@@ -134,6 +139,9 @@ const YogisList = observer(({ retreat, store }) => {
     reverend: true,
   });
 
+  const [searchQuery, setSearchQuery] = useState("");
+
+
   const [sortBy, setSortBy] = useState(SELECTION_PRIORITY_SORT);
 
   const countByState = computed(() => {
@@ -231,12 +239,32 @@ const YogisList = observer(({ retreat, store }) => {
         filters.reverend ||
         yogi.attributes[DHIS2_TEI_ATTRIBUTE_MARITAL_STATE].toLowerCase() !==
         "reverend",
-    );
+    )
+    .filter((yogi) => {
+      if (!searchQuery) return true;
+      const query = searchQuery.toLowerCase();
+      const name =
+        yogi.attributes[DHIS2_TEI_ATTRIBUTE_FULL_NAME]?.toLowerCase() || "";
+      const mobile =
+        yogi.attributes[DHIS2_TEI_ATTRIBUTE_MOBILE]?.toLowerCase() || "";
+      const nic =
+        yogi.attributes[DHIS2_TEI_ATTRIBUTE_NIC]?.toLowerCase() || "";
+      const passport =
+        yogi.attributes[DHIS2_TEI_ATTRIBUTE_PASSPORT]?.toLowerCase() || "";
+
+      return (
+        name.includes(query) ||
+        mobile.includes(query) ||
+        nic.includes(query) ||
+        passport.includes(query)
+      );
+    });
 
   return (
     <div>
       <div className="yogi-list-top-bar">
         <YogiFilter filters={filters} setFilters={setFilters} />
+
         <SingleSelectField
           placeholder="Sort"
           prefix="Sort"
@@ -252,6 +280,13 @@ const YogisList = observer(({ retreat, store }) => {
           />
           <SingleSelectOption value={AGE_SORT} label="Age" />
         </SingleSelectField>
+        <InputField
+          className="yogi-search-input"
+          placeholder="Search by Name, NIC/Passport, Mobile"
+          value={searchQuery}
+          onChange={({ value }) => setSearchQuery(value)}
+          type="search"
+        />
 
       </div>
       <div>
@@ -616,11 +651,15 @@ const AttendanceButton = observer(({ yogi, retreat, store }) => {
 });
 
 const InvitationIndicator = observer(({ yogi, retreat, store }) => {
-  const [invitationSent, setInvitationSent] = useState(
-    yogi.expressionOfInterests[retreat.code]?.invitationSent ||
-    "yet to be sent",
+  const status =
+    yogi.expressionOfInterests[retreat.code]?.invitationSent || "pending";
+  return (
+    <div style={{ marginTop: 20 }}>
+      <Tag positive={status === "sent"}>
+        {status === "sent" ? "Invitation Sent" : "Invitation Pending"}
+      </Tag>
+    </div>
   );
-  return <div style={{ marginTop: 20 }}>✉️ Invitation {invitationSent}</div>;
 });
 
 export default YogisList;

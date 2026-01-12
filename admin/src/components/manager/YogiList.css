@@ -90,3 +90,8 @@
 .yogi-table th:nth-child(5) {
     width: 160px;
 }
+
+.yogi-search-input {
+    min-width: 300px;
+    height: 40px;
+}
