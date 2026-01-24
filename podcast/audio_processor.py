@@ -2,6 +2,14 @@ import subprocess
 import json
 import os
 
+# Audio processing configuration
+AUDIO_CHANNELS = 1  # Mono
+AUDIO_SAMPLE_RATE = 44100  # Hz
+AUDIO_BITRATE = "64k"  # kbps - optimized for speech
+LOUDNORM_INTEGRATED = -19  # LUFS target loudness
+LOUDNORM_TRUE_PEAK = -1.5  # dBTP max true peak
+LOUDNORM_LRA = 11  # LU loudness range
+
 
 class AudioProcessor:
     def __init__(self, thero_name):
@@ -18,7 +26,7 @@ class AudioProcessor:
             "-i",
             safe_input,
             "-af",
-            "loudnorm=I=-19:TP=-1.5:LRA=11:print_format=json",
+            f"loudnorm=I={LOUDNORM_INTEGRATED}:TP={LOUDNORM_TRUE_PEAK}:LRA={LOUDNORM_LRA}:print_format=json",
             "-f",
             "null",
             "-",
@@ -39,7 +47,7 @@ class AudioProcessor:
 
     def convert_to_mp3(self, input_file, output_file):
         stats = self._get_loudness_stats(input_file)
-        loudnorm_filter = "loudnorm=I=-19:TP=-1.5:LRA=11"
+        loudnorm_filter = f"loudnorm=I={LOUDNORM_INTEGRATED}:TP={LOUDNORM_TRUE_PEAK}:LRA={LOUDNORM_LRA}"
 
         if stats:
             loudnorm_filter += (
@@ -60,11 +68,11 @@ class AudioProcessor:
             "-i",
             safe_input,
             "-ac",
-            "1",
+            str(AUDIO_CHANNELS),
             "-ar",
-            "44100",
+            str(AUDIO_SAMPLE_RATE),
             "-b:a",
-            "64k",
+            AUDIO_BITRATE,
             "-af",
             loudnorm_filter,
             "-y",

@@ -24,6 +24,11 @@ from rate_limiter import RateLimiter
 
 load_dotenv()
 
+# Default rate limit when not specified in config (effectively unlimited)
+DEFAULT_MAX_VIDEOS_PER_DAY = 999
+# HTTP request timeout in seconds
+HTTP_REQUEST_TIMEOUT = 60
+
 
 class PodcastSync:
     def __init__(self, thero_config):
@@ -32,7 +37,9 @@ class PodcastSync:
         self.thero_name = thero_config.get("name", self.thero_id)
         self.podcast_config = thero_config["podcast"]
         self.ai_config = thero_config.get("ai_config", {"enabled": False})
-        self.sync_config = thero_config.get("sync_config", {"max_videos_per_day": 999})
+        self.sync_config = thero_config.get(
+            "sync_config", {"max_videos_per_day": DEFAULT_MAX_VIDEOS_PER_DAY}
+        )
 
         # S3 Setup via Composition
         s3_conf = thero_config["s3"]
@@ -42,7 +49,7 @@ class PodcastSync:
             access_key=os.getenv(s3_conf["access_key_env"]),
             secret_key=os.getenv(s3_conf["secret_key_env"]),
         )
-        self.base_url = self.s3.base_url = f"{self.s3.endpoint}/{self.s3.bucket}"
+        self.base_url = f"{self.s3.endpoint}/{self.s3.bucket}"
 
         # Audio Setup via Composition
         self.audio = AudioProcessor(self.thero_name)
@@ -55,7 +62,9 @@ class PodcastSync:
         self.state_file = "sync_state.json"
         # Initialise RateLimiter which loads and manages persisted state
         self.rate_limiter = RateLimiter(
-            self.s3, self.state_file, self.sync_config.get("max_videos_per_day", 999)
+            self.s3,
+            self.state_file,
+            self.sync_config.get("max_videos_per_day", DEFAULT_MAX_VIDEOS_PER_DAY),
         )
 
     def _get_pub_date(self, info):
@@ -192,7 +201,9 @@ class PodcastSync:
                     thumb_url = info.get("thumbnail")
                     if thumb_url:
                         try:
-                            with requests.get(thumb_url, stream=True, timeout=60) as r:
+                            with requests.get(
+                                thumb_url, stream=True, timeout=HTTP_REQUEST_TIMEOUT
+                            ) as r:
                                 if r.status_code == 200:
                                     with open(img_file, "wb") as f:
                                         for chunk in r.iter_content(1024):

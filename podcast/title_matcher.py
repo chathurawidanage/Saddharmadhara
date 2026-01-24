@@ -2,6 +2,9 @@ import json
 import os
 from thefuzz import fuzz, process
 
+# Minimum fuzzy match score (0-100) required for a token to be considered a match
+FUZZY_MATCH_THRESHOLD = 85
+
 
 def load_thero_data(file_path):
     """Loads Thero data from a JSON file."""
@@ -37,7 +40,7 @@ def is_thero_in_content(title, description, thero_config):
                 else 0
             )
             en_matches.append(max(title_score, desc_score))
-        en_ok = all(s > 85 for s in en_matches)
+        en_ok = all(s > FUZZY_MATCH_THRESHOLD for s in en_matches)
 
     # Check Sinhala Names in Title or Description
     si_ok = False
@@ -53,6 +56,6 @@ def is_thero_in_content(title, description, thero_config):
                 else 0
             )
             si_matches.append(max(title_score, desc_score))
-        si_ok = all(s > 85 for s in si_matches)
+        si_ok = all(s > FUZZY_MATCH_THRESHOLD for s in si_matches)
 
     return en_ok or si_ok
