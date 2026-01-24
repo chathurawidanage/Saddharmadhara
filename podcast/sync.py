@@ -227,8 +227,6 @@ class PodcastSync:
                     os.remove(f)
 
     def process_video_task(self, item):
-        # Increment attempt counter for each video processed
-        attempt_counter.labels(thero=self.thero_id).inc()
         vid_id = item["id"]
 
         # Skip if we have a valid completion record
@@ -236,6 +234,8 @@ class PodcastSync:
             return None
 
         try:
+            # Increment attempt counter for each video processed
+            attempt_counter.labels(thero=self.thero_id).inc()
             metadata = self.download_and_process(item["url"])
             self.s3.save_metadata(metadata)
             self.rate_limiter.record_success()
