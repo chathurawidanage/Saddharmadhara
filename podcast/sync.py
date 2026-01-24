@@ -176,20 +176,11 @@ class PodcastSync:
                         except Exception as e:
                             print(f"[{self.thero_name}] Thumbnail error: {e}")
 
-                # Metadata Generation
-                desc_tmp = self.podcast_config["description_template"]
-                description = desc_tmp.format(
-                    title=title, original_url=video_url, original_title=original_title
-                )
-                if ai_data and ai_data.get("description"):
-                    description += "<br /><br />" + ai_data["description"]
-
                 metadata = {
                     "id": vid_id,
                     "title": title,
                     "original_title": original_title,
                     "original_url": video_url,
-                    "description": description,
                     "s3_audio_url": s3_audio_url,
                     "s3_image_url": s3_image_url,
                     "pub_date": email.utils.formatdate(usegmt=True),
@@ -367,6 +358,26 @@ class PodcastSync:
         for key in metadata_keys:
             res = self.s3.get_json(key)
             if res:
+                # Regenerate description from current template to ensure consistency
+                try:
+                    desc_tmp = self.podcast_config["description_template"]
+                    original_title = res.get("original_title") or res.get("title")
+                    description = desc_tmp.format(
+                        title=res.get("title"),
+                        original_url=res.get("original_url"),
+                        original_title=original_title,
+                    )
+                    # Append AI description if available
+                    ai_data = res.get("ai_response")
+                    if ai_data and ai_data.get("description"):
+                        description += "<br /><br />" + ai_data["description"]
+
+                    res["description"] = description
+                except Exception as e:
+                    print(
+                        f"[{self.thero_name}] Error regenerating description for {key}: {e}"
+                    )
+
                 items.append(res)
 
         print(f"[{self.thero_name}] Sorting {len(items)} items by date...")
@@ -427,4 +438,4 @@ def run_rss_update_workflow():
 
 
 if __name__ == "__main__":
-    run_sync_workflow()
+    run_rss_update_workflow()

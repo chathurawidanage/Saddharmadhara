@@ -65,7 +65,8 @@ class RSSGenerator:
         )
 
         for item in items:
-            if not item.get("url"):
+            audio_url = item.get("s3_audio_url") or item.get("url")
+            if not audio_url:
                 continue
             rss_item = add_tag(channel, "item")
             add_tag(rss_item, "title", item.get("title", "No Title"))
@@ -77,7 +78,7 @@ class RSSGenerator:
                 rss_item,
                 "enclosure",
                 attrib={
-                    "url": item["url"],
+                    "url": audio_url,
                     "type": "audio/mpeg",
                     "length": str(item.get("length_bytes", 0)),
                 },
@@ -85,7 +86,7 @@ class RSSGenerator:
             add_tag(
                 rss_item,
                 "guid",
-                text=item.get("id", item["url"]),
+                text=item.get("id", audio_url),
                 attrib={"isPermaLink": "false"},
             )
             add_tag(rss_item, "pubDate", item.get("pub_date", ""))
