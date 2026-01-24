@@ -22,7 +22,7 @@ Analyze the provided YouTube video and return a structured JSON response contain
 
 4. **Podcast Description (Sinhala)**:
    * **Language**: Sinhala.
-   * **Length**: Strictly less than 400 words.
+   * **Length**: Strictly less than 800 words.
    * **HTML Structure**: Use `<p>` for paragraphs and `<ul><li>` or `<ol><li>` for lists to preserve formatting.
    * **Wrapping**: Do NOT wrap the HTML in CDATA tags. Returning raw HTML is preferred.
    * **Strict Objectivity**: Do NOT add concluding blessings, aspirational statements (e.g., "May this lead to Nirvana"), or advice not explicitly stated in the video. Summarize only the factual points covered by the Thero.
