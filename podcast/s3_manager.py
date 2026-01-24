@@ -77,3 +77,12 @@ class S3Manager:
         self.upload_file(local_temp, state_file, "application/json")
         if os.path.exists(local_temp):
             os.remove(local_temp)
+
+    def save_metadata(self, metadata):
+        vid_id = metadata["id"]
+        meta_file = f"{vid_id}.json"
+        with open(meta_file, "w", encoding="utf-8") as f:
+            json.dump(metadata, f, indent=2, ensure_ascii=False)
+        self.upload_file(meta_file, meta_file, "application/json")
+        if os.path.exists(meta_file):
+            os.remove(meta_file)

@@ -23,8 +23,7 @@ class RateLimiter:
     # ---------------------------------------------------------------------
     def _period_seconds(self) -> float:
         """Calculate the minimum interval between two syncs based on the daily
-        allowance.  ``max_per_day`` may be ``0`` (meaning no limit) – in that case
-        we return a very large number so the check always passes.
+        allowance.
         """
         if not self.max_per_day:
             return float("inf")

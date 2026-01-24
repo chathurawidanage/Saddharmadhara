@@ -11,9 +11,9 @@ from metrics import (
 )
 import os
 import requests
-import json
 from dotenv import load_dotenv
 import email.utils
+import datetime
 
 from title_matcher import is_thero_in_content, load_thero_data
 from s3_manager import S3Manager
@@ -71,51 +71,63 @@ class PodcastSync:
                 }
             },
         }
-        raw_file, mp3_file, meta_file, img_file = None, None, None, None
+        raw_file, mp3_file, img_file = None, None, None
 
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                metadata = {
+                    "id": None,
+                    "title": None,
+                    "original_title": None,
+                    "original_url": None,
+                    "s3_audio_url": None,
+                    "s3_image_url": None,
+                    "pub_date": None,
+                    "length_bytes": 0,
+                    "duration": 0,
+                    "title_match": True,
+                    "ai_response": None,
+                }
+
                 # First extract info without downloading to check the title
                 info = ydl.extract_info(video_url, download=False)
-                vid_id = info["id"]
-                title = info.get("title", "No Title")
-                meta_file = f"{vid_id}.json"
+
+                metadata["id"] = info["id"]
+                metadata["title"] = info.get("title", "No Title")
+                metadata["original_title"] = metadata["title"]
+                metadata["original_url"] = video_url
+                # todo set pub_date from video info
+                metadata["pub_date"] = email.utils.formatdate(usegmt=True)
+                metadata["duration"] = info.get("duration", 0)
 
                 # Title/Description filter check BEFORE download
                 yt_description = info.get("description", "")
                 if "matcher" in self.config and not is_thero_in_content(
-                    title, yt_description, self.config
+                    metadata["original_title"], yt_description, self.config
                 ):
                     print(
-                        f"[{self.thero_name}] Skipping {vid_id}: Title mismatch. Saving ignore record."
+                        f"[{self.thero_name}] Skipping {metadata['id']}: Title mismatch. Saving ignore record."
                     )
                     # Metadata for ignored video
-                    metadata = {
-                        "id": vid_id,
-                        "title": title,
-                        "original_url": video_url,
-                        "title_match": False,
-                        "pub_date": email.utils.formatdate(usegmt=True),
-                    }
-                    with open(meta_file, "w", encoding="utf-8") as f:
-                        json.dump(metadata, f, indent=2, ensure_ascii=False)
-                    self.s3.upload_file(meta_file, meta_file, "application/json")
-                    return "ignored"
+                    metadata["title_match"] = False
+                    skipped_counter.labels(
+                        thero=self.thero_id, reason="title_mismatch"
+                    ).inc()
+                    return metadata
 
                 # AI Metadata Generation (Before Download)
-                ai_data = None
-                original_title = title
                 if self.ai_manager:
-                    print(f"[{self.thero_name}] Generating AI metadata for {vid_id}...")
+                    print(
+                        f"[{self.thero_name}] Generating AI metadata for {metadata['id']}..."
+                    )
                     try:
-                        ai_data = self.ai_manager.generate_metadata(video_url)
-                        if ai_data:
+                        metadata["ai_response"] = self.ai_manager.generate_metadata(
+                            video_url
+                        )
+                        if metadata["ai_response"]:
                             print(
-                                f"[{self.thero_name}] AI metadata generated for {vid_id}."
+                                f"[{self.thero_name}] AI metadata generated for {metadata['id']}."
                             )
-                            # Override title if provided
-                            if ai_data.get("title"):
-                                title = ai_data["title"]
                     except AIRateLimitError as e:
                         print(f"[{self.thero_name}] AI Rate Limit reached: {e}")
                         ai_rate_limited_counter.labels(thero=self.thero_id).inc()
@@ -123,44 +135,47 @@ class PodcastSync:
                         return None
                     except AIGenerationError as e:
                         print(
-                            f"[{self.thero_name}] AI Generation failed for {vid_id}: {e}"
+                            f"[{self.thero_name}] AI Generation failed for {metadata['id']}: {e}"
                         )
                         ai_failure_counter.labels(thero=self.thero_id).inc()
                         return None
 
                 mp3_file, img_file = (
-                    f"{vid_id}.mp3",
-                    f"{vid_id}.jpg",
+                    f"{metadata['id']}.mp3",
+                    f"{metadata['id']}.jpg",
                 )
 
-                s3_audio_url = None
-                s3_image_url = None
-                length_bytes = 0
-                duration = info.get("duration", 0)
-
                 # Check if we should skip audio processing
-                is_friendly = True
-                if ai_data and ai_data.get("podcast_friendly") is False:
-                    is_friendly = False
+                is_podcast_friendly = True
+                if (
+                    metadata["ai_response"]
+                    and metadata["ai_response"].get("podcast_friendly") is False
+                ):
+                    is_podcast_friendly = False
                     print(
-                        f"[{self.thero_name}] Video {vid_id} is not podcast-friendly. Skipping audio processing."
+                        f"[{self.thero_name}] Video {metadata['id']} is not podcast-friendly. Skipping audio processing."
                     )
+                    skipped_counter.labels(
+                        thero=self.thero_id, reason="not_podcast_friendly"
+                    ).inc()
 
-                if is_friendly:
+                    return metadata
+
+                if is_podcast_friendly:
                     # Now download because the title matched and it's podcast friendly
-                    print(f"[{self.thero_name}] Downloading audio: {vid_id}")
+                    print(f"[{self.thero_name}] Downloading audio: {metadata['id']}")
                     ydl.download([video_url])
                     raw_file = ydl.prepare_filename(info)
 
                     # Audio Conversion
-                    print(f"[{self.thero_name}] Processing audio: {vid_id}")
+                    print(f"[{self.thero_name}] Processing audio: {metadata['id']}")
                     self.audio.convert_to_mp3(raw_file, mp3_file)
 
                     # Upload Audio
-                    print(f"[{self.thero_name}] Uploading MP3: {vid_id}")
+                    print(f"[{self.thero_name}] Uploading MP3: {metadata['id']}")
                     self.s3.upload_file(mp3_file, mp3_file, "audio/mpeg")
-                    s3_audio_url = f"{self.base_url}/{mp3_file}"
-                    length_bytes = os.path.getsize(mp3_file)
+                    metadata["s3_audio_url"] = f"{self.base_url}/{mp3_file}"
+                    metadata["length_bytes"] = os.path.getsize(mp3_file)
 
                     # Thumbnail
                     thumb_url = info.get("thumbnail")
@@ -172,36 +187,14 @@ class PodcastSync:
                                     for chunk in r.iter_content(1024):
                                         f.write(chunk)
                                 self.s3.upload_file(img_file, img_file, "image/jpeg")
-                                s3_image_url = f"{self.base_url}/{img_file}"
+                                metadata["s3_image_url"] = f"{self.base_url}/{img_file}"
                         except Exception as e:
                             print(f"[{self.thero_name}] Thumbnail error: {e}")
 
-                metadata = {
-                    "id": vid_id,
-                    "title": title,
-                    "original_title": original_title,
-                    "original_url": video_url,
-                    "s3_audio_url": s3_audio_url,
-                    "s3_image_url": s3_image_url,
-                    "pub_date": email.utils.formatdate(usegmt=True),
-                    "length_bytes": length_bytes,
-                    "duration": duration,
-                    "title_match": True,
-                    "ai_response": ai_data,
-                }
-
-                # CRITICAL: Write and upload JSON ONLY after all other uploads are done
-                with open(meta_file, "w", encoding="utf-8") as f:
-                    json.dump(metadata, f, indent=2, ensure_ascii=False)
-
-                print(
-                    f"[{self.thero_name}] Finalizing sync: Uploading metadata for {vid_id}"
-                )
-                self.s3.upload_file(meta_file, meta_file, "application/json")
                 return metadata
 
         finally:
-            for f in [raw_file, mp3_file, meta_file, img_file]:
+            for f in [raw_file, mp3_file, img_file]:
                 if f and os.path.exists(f):
                     os.remove(f)
 
@@ -209,83 +202,21 @@ class PodcastSync:
         # Increment attempt counter for each video processed
         attempt_counter.labels(thero=self.thero_id).inc()
         vid_id = item["id"]
-        title = item.get("title")
-        # Enforce periodic sync based on daily allowance regardless of AI rate limit
-        # Enforce periodic sync limit via RateLimiter
-        can_sync, wait_min = self.rate_limiter.can_sync_periodic()
-        if not can_sync:
-            print(
-                f"[{self.thero_name}] Sync limited; waiting {wait_min} minutes before next attempt."
-            )
-            skipped_counter.labels(thero=self.thero_id, reason="periodic_limit").inc()
-            return None
-        # Proceed with processing; after successful sync, RateLimiter will record success.
 
-        # Robust check: Only skip if we have a valid completion record
+        # Skip if we have a valid completion record
         if self.s3.file_exists(f"{vid_id}.json"):
-            try:
-                metadata = self.s3.get_json(f"{vid_id}.json")
-
-                # If it's a match, verify it's complete
-                if metadata.get("title_match") is True:
-                    is_friendly = metadata.get("ai_response", {}).get(
-                        "podcast_friendly", True
-                    )
-                    # If it's podcast friendly, it MUST have an audio URL to be considered "synced"
-                    if is_friendly and not metadata.get("s3_audio_url"):
-                        print(
-                            f"[{self.thero_name}] Found incomplete sync for {vid_id}. Retrying..."
-                        )
-                    else:
-                        print(f"[{self.thero_name}] Skipping {vid_id}: Already exists.")
-                        skipped_counter.labels(
-                            thero=self.thero_id, reason="already_exists"
-                        ).inc()
-                        return None
-
-                # If it's a mismatch, verify it STILL mismatches
-                elif metadata.get("title_match") is False:
-                    # We only have the title from the flat sync list
-                    # If the title alone matches now, we re-process (it might stay 'ignored' if desc doesn't help)
-                    if title and is_thero_in_content(title, "", self.config):
-                        print(
-                            f"[{self.thero_name}] Previously ignored {vid_id} might match now. Re-checking."
-                        )
-                    else:
-                        return None
-            except Exception as e:
-                print(
-                    f"[{self.thero_name}] Error checking existing metadata for {vid_id}: {e}. Retrying."
-                )
-
-        # Check daily limit via RateLimiter
-        if not self.rate_limiter.can_sync_daily():
-            print(
-                f"[{self.thero_name}] Skipping {vid_id}: Daily sync limit reached ({self.rate_limiter.max_per_day})."
-            )
-            skipped_counter.labels(thero=self.thero_id, reason="daily_limit").inc()
             return None
 
         try:
-            result = self.download_and_process(item["url"])
+            metadata = self.download_and_process(item["url"])
+            self.s3.save_metadata(metadata)
+            self.rate_limiter.record_success()
+            success_counter.labels(thero=self.thero_id).inc()
         except Exception as e:
             print(
                 f"[{self.thero_name}] Error during download_and_process for {vid_id}: {e}"
             )
             failure_counter.labels(thero=self.thero_id).inc()
-            return None
-        if result == "ignored":
-            skipped_counter.labels(thero=self.thero_id, reason="title_mismatch").inc()
-            return None
-        if result:
-            # Record successful sync via RateLimiter (updates counters and persists state)
-            self.rate_limiter.record_success()
-            success_counter.labels(thero=self.thero_id).inc()
-            print(f"[{self.thero_name}] Successfully synced {vid_id}.")
-            return result
-        # If result is None and not ignored, treat as failure
-        failure_counter.labels(thero=self.thero_id).inc()
-        return None
 
     def sync(self):
         sync_run_counter.labels(thero=self.thero_id).inc()
@@ -331,12 +262,23 @@ class PodcastSync:
 
         # Process videos sequentially
         for item in video_items:
+            # Check daily limit via RateLimiter
+            if not self.rate_limiter.can_sync_daily():
+                print(
+                    f"[{self.thero_name}] Skipping video processing: Daily sync limit reached ({self.rate_limiter.max_per_day})."
+                )
+                skipped_counter.labels(thero=self.thero_id, reason="daily_limit").inc()
+                break
+
             # Periodic sync limit check via RateLimiter
             can_sync, wait_min = self.rate_limiter.can_sync_periodic()
             if not can_sync:
                 print(
                     f"[{self.thero_name}] Sync limited; waiting {wait_min} minutes before next attempt."
                 )
+                skipped_counter.labels(
+                    thero=self.thero_id, reason="periodic_limit"
+                ).inc()
                 break
             if self.ai_rate_limited:
                 break
@@ -380,20 +322,34 @@ class PodcastSync:
 
                 items.append(res)
 
+        def get_safe_pub_date(x):
+            try:
+                dt = email.utils.parsedate_to_datetime(x.get("pub_date", ""))
+                if dt.tzinfo is None:
+                    return dt.replace(tzinfo=datetime.timezone.utc)
+                return dt
+            except Exception:
+                return datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
+
         print(f"[{self.thero_name}] Sorting {len(items)} items by date...")
         items.sort(
-            key=lambda x: email.utils.parsedate_to_datetime(x.get("pub_date", "")),
+            key=get_safe_pub_date,
             reverse=True,
         )
 
         # Filter out non-podcast friendly items if AI is enabled and flagged
         original_count = len(items)
-        items = [
-            item
-            for item in items
-            if item.get("ai_response", {}).get("podcast_friendly", True) is not False
-            and item.get("title_match", True) is not False
-        ]
+        filtered_items = []
+        for item in items:
+            ai_resp = item.get("ai_response") or {}
+            # Check podcast friendly status (default True)
+            is_friendly = ai_resp.get("podcast_friendly", True)
+            # Check title match status (default True)
+            is_match = item.get("title_match", True)
+
+            if is_friendly is not False and is_match is not False:
+                filtered_items.append(item)
+        items = filtered_items
         if len(items) < original_count:
             count = original_count - len(items)
             print(
@@ -438,4 +394,4 @@ def run_rss_update_workflow():
 
 
 if __name__ == "__main__":
-    run_rss_update_workflow()
+    run_sync_workflow()
