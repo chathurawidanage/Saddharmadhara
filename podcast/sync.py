@@ -27,6 +27,7 @@ load_dotenv()
 
 # Default rate limit when not specified in config (effectively unlimited)
 DEFAULT_MAX_VIDEOS_PER_DAY = 999
+DEFAULT_MAX_AI_CALLS_PER_DAY = 10
 # HTTP request timeout in seconds
 HTTP_REQUEST_TIMEOUT = 60
 
@@ -57,7 +58,6 @@ class PodcastSync:
 
         # AI Manager Setup
         self.ai_manager = AIManager() if self.ai_config.get("enabled") else None
-        self.ai_rate_limited = False
 
         # Rate Limiting State (delegated to RateLimiter)
         self.state_file = "sync_state.json"
@@ -66,6 +66,7 @@ class PodcastSync:
             self.s3,
             self.state_file,
             self.sync_config.get("max_videos_per_day", DEFAULT_MAX_VIDEOS_PER_DAY),
+            self.sync_config.get("max_ai_calls_per_day", DEFAULT_MAX_AI_CALLS_PER_DAY),
         )
 
     def _get_pub_date(self, info):
@@ -155,7 +156,6 @@ class PodcastSync:
                     except AIRateLimitError as e:
                         print(f"[{self.thero_name}] AI Rate Limit reached: {e}")
                         ai_rate_limited_counter.labels(thero=self.thero_id).inc()
-                        self.ai_rate_limited = True
                         raise
                     except AIGenerationError as e:
                         print(
@@ -163,6 +163,9 @@ class PodcastSync:
                         )
                         ai_failure_counter.labels(thero=self.thero_id).inc()
                         raise
+                    finally:
+                        # Record AI call whether it succeeds or fails (API quota is consumed)
+                        self.rate_limiter.record_ai_call()
 
                 mp3_file, img_file = (
                     f"{metadata['id']}.mp3",
@@ -225,6 +228,52 @@ class PodcastSync:
             for f in [raw_file, mp3_file, img_file]:
                 if f and os.path.exists(f):
                     os.remove(f)
+
+    def _is_sync_allowed(self) -> bool:
+        """Check all rate limits before processing a video.
+
+        Returns True if sync is allowed, False otherwise.
+        Logs the reason and increments metrics when rate-limited.
+        """
+        # Check daily video limit
+        if not self.rate_limiter.can_sync_daily():
+            print(
+                f"[{self.thero_name}] Daily sync limit reached ({self.rate_limiter.max_per_day}). Stopping sync."
+            )
+            skipped_counter.labels(thero=self.thero_id, reason="daily_limit").inc()
+            return False
+
+        # Check periodic video limit
+        can_sync, wait_min = self.rate_limiter.can_sync_periodic()
+        if not can_sync:
+            print(
+                f"[{self.thero_name}] Sync limited; waiting {wait_min} minutes before next attempt."
+            )
+            skipped_counter.labels(thero=self.thero_id, reason="periodic_limit").inc()
+            return False
+
+        # Check AI rate limits if AI is enabled (AI is mandatory when enabled)
+        if self.ai_manager:
+            if not self.rate_limiter.can_ai_call_daily():
+                print(
+                    f"[{self.thero_name}] Daily AI call limit reached ({self.rate_limiter.max_ai_calls_per_day}). Stopping sync."
+                )
+                skipped_counter.labels(
+                    thero=self.thero_id, reason="ai_daily_limit"
+                ).inc()
+                return False
+
+            can_ai_call, ai_wait_min = self.rate_limiter.can_ai_call_periodic()
+            if not can_ai_call:
+                print(
+                    f"[{self.thero_name}] AI rate limited; waiting {ai_wait_min} minutes before next attempt."
+                )
+                skipped_counter.labels(
+                    thero=self.thero_id, reason="ai_periodic_limit"
+                ).inc()
+                return False
+
+        return True
 
     def process_video_task(self, item):
         vid_id = item["id"]
@@ -290,30 +339,9 @@ class PodcastSync:
 
         # Process videos sequentially
         for item in video_items:
-            # Check daily limit via RateLimiter
-            if not self.rate_limiter.can_sync_daily():
-                print(
-                    f"[{self.thero_name}] Skipping video processing: Daily sync limit reached ({self.rate_limiter.max_per_day})."
-                )
-                skipped_counter.labels(thero=self.thero_id, reason="daily_limit").inc()
-                break
-
-            # Periodic sync limit check via RateLimiter
-            can_sync, wait_min = self.rate_limiter.can_sync_periodic()
-            if not can_sync:
-                print(
-                    f"[{self.thero_name}] Sync limited; waiting {wait_min} minutes before next attempt."
-                )
-                skipped_counter.labels(
-                    thero=self.thero_id, reason="periodic_limit"
-                ).inc()
-                break
-            if self.ai_rate_limited:
+            if not self._is_sync_allowed():
                 break
             self.process_video_task(item)
-
-        if self.ai_rate_limited:
-            print(f"[{self.thero_name}] Sync partially halted due to AI Rate Limiting.")
 
         self.refresh_rss()
         print(f"[{self.thero_name}] Sync complete.")

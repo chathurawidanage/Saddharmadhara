@@ -11,7 +11,8 @@
         "check_podcast_friendly": true
     },
     "sync_config": {
-        "max_videos_per_day": 10
+        "max_videos_per_day": 999,
+        "max_ai_calls_per_day": 10
     },
     "rss_filename": "podcast.xml",
     "s3": {
