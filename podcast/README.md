@@ -21,6 +21,7 @@ Dhamma talks by **Ven. Watagoda Maggavihari Thero** (පූජ්‍ය වට�
 
 [![Apple Podcasts](https://img.shields.io/badge/Apple_Podcasts-9933CC?style=for-the-badge&logo=apple-podcasts&logoColor=white)](https://podcasts.apple.com/us/podcast/වටගොඩ-මග්ගවිහාරී-හිමි-ven-watagoda-maggavihari-thero/id1871646624)
 [![Spotify](https://img.shields.io/badge/Spotify-1ED760?style=for-the-badge&logo=spotify&logoColor=white)](https://open.spotify.com/show/4Tu5syVofxiwu00PxurUIx)
+[![Amazon Music](https://img.shields.io/badge/Amazon_Music-FF9900?style=for-the-badge&logo=amazon-music&logoColor=white)](https://music.amazon.com/podcasts/be3b57f8-dfb6-4fe0-8988-402b57931343/වටගඩ-මගගවහර-හම-ven-watagoda-maggavihari-thero)
 [![Pocket Casts](https://img.shields.io/badge/Pocket_Casts-F43E37?style=for-the-badge&logo=pocket-casts&logoColor=white)](https://pca.st/bo8kic93)
 
 ## Features

@@ -422,5 +422,5 @@ def run_rss_update_workflow():
 
 
 if __name__ == "__main__":
-    run_sync_workflow()
-    # run_rss_update_workflow()
+    # run_sync_workflow()
+    run_rss_update_workflow()
