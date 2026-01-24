@@ -32,3 +32,8 @@ sync_run_counter = Counter(
     "Total number of times the sync workflow is initiated",
     ["thero"],
 )
+filtered_items_counter = Counter(
+    "sync_filtered_items_total",
+    "Total number of items filtered out from RSS feed",
+    ["thero"],
+)

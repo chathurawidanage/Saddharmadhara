@@ -7,6 +7,7 @@ from metrics import (
     ai_failure_counter,
     ai_rate_limited_counter,
     sync_run_counter,
+    filtered_items_counter,
 )
 import os
 import requests
@@ -377,9 +378,11 @@ class PodcastSync:
             and item.get("title_match", True) is not False
         ]
         if len(items) < original_count:
+            count = original_count - len(items)
             print(
-                f"[{self.thero_name}] Filtered out {original_count - len(items)} non-podcast friendly items."
+                f"[{self.thero_name}] Filtered out {count} non-podcast friendly items."
             )
+            filtered_items_counter.labels(thero=self.thero_id).inc(count)
 
         rss_file = self.config.get("rss_filename", "podcast.xml")
         RSSGenerator.generate(self.config, items, self.base_url, rss_file)
