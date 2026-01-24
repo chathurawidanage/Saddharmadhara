@@ -107,7 +107,6 @@ class PodcastSync:
 
                 metadata["id"] = info["id"]
                 metadata["title"] = info.get("title", "No Title")
-                metadata["original_title"] = metadata["title"]
                 metadata["original_url"] = video_url
                 metadata["pub_date"] = self._get_pub_date(info)
                 metadata["duration"] = info.get("duration", 0)
@@ -144,13 +143,13 @@ class PodcastSync:
                         print(f"[{self.thero_name}] AI Rate Limit reached: {e}")
                         ai_rate_limited_counter.labels(thero=self.thero_id).inc()
                         self.ai_rate_limited = True
-                        return None
+                        raise
                     except AIGenerationError as e:
                         print(
                             f"[{self.thero_name}] AI Generation failed for {metadata['id']}: {e}"
                         )
                         ai_failure_counter.labels(thero=self.thero_id).inc()
-                        return None
+                        raise
 
                 mp3_file, img_file = (
                     f"{metadata['id']}.mp3",
@@ -193,12 +192,14 @@ class PodcastSync:
                     thumb_url = info.get("thumbnail")
                     if thumb_url:
                         try:
-                            r = requests.get(thumb_url, stream=True)
-                            if r.status_code == 200:
-                                with open(img_file, "wb") as f:
-                                    for chunk in r.iter_content(1024):
-                                        f.write(chunk)
-                                self.s3.upload_file(img_file, img_file, "image/jpeg")
+                            with requests.get(thumb_url, stream=True, timeout=60) as r:
+                                if r.status_code == 200:
+                                    with open(img_file, "wb") as f:
+                                        for chunk in r.iter_content(1024):
+                                            f.write(chunk)
+                                    self.s3.upload_file(
+                                        img_file, img_file, "image/jpeg"
+                                    )
                                 metadata["s3_image_url"] = f"{self.base_url}/{img_file}"
                         except Exception as e:
                             print(f"[{self.thero_name}] Thumbnail error: {e}")

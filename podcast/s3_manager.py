@@ -42,8 +42,16 @@ class S3Manager:
         )
 
     def get_json(self, key):
-        resp = self.client.get_object(Bucket=self.bucket, Key=key)
-        return json.loads(resp["Body"].read().decode("utf-8"))
+        try:
+            resp = self.client.get_object(Bucket=self.bucket, Key=key)
+            return json.loads(resp["Body"].read().decode("utf-8"))
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "NoSuchKey":
+                return None
+            raise
+        except json.JSONDecodeError as e:
+            print(f"Warning: Invalid JSON in {key}: {e}")
+        return None
 
     def list_metadata_files(self):
         paginator = self.client.get_paginator("list_objects_v2")

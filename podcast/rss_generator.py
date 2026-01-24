@@ -1,4 +1,5 @@
 import xml.etree.ElementTree as ET
+from xml.sax.saxutils import unescape
 
 
 class RSSGenerator:
@@ -69,7 +70,10 @@ class RSSGenerator:
             if not audio_url:
                 continue
             rss_item = add_tag(channel, "item")
-            add_tag(rss_item, "title", item.get("title", "No Title"))
+            # Use AI-generated title if available, otherwise fall back to original
+            ai_response = item.get("ai_response") or {}
+            title = ai_response.get("title") or item.get("title", "No Title")
+            add_tag(rss_item, "title", title)
 
             desc = item.get("description", "")
             add_tag(rss_item, "description", f"%%CDATA_START%%{desc}%%CDATA_END%%")
@@ -115,23 +119,14 @@ class RSSGenerator:
         tree.write(local_filename, encoding="UTF-8", xml_declaration=True)
 
         with open(local_filename, "r", encoding="UTF-8") as f:
-            content = (
-                f.read()
-                .replace("%%CDATA_START%%", "<![CDATA[")
-                .replace("%%CDATA_END%%", "]]>")
-                .replace("&lt;br /&gt;", "<br />")
-                .replace("&lt;p&gt;", "<p>")
-                .replace("&lt;/p&gt;", "</p>")
-                .replace("&lt;ul&gt;", "<ul>")
-                .replace("&lt;/ul&gt;", "</ul>")
-                .replace("&lt;li&gt;", "<li>")
-                .replace("&lt;/li&gt;", "</li>")
-                .replace("&lt;ol&gt;", "<ol>")
-                .replace("&lt;/ol&gt;", "</ol>")
-                .replace("&lt;a", "<a")
-                .replace("&lt;/a&gt;", "</a>")
-                .replace("&quot;", '"')
-                .replace("&gt;", ">")
-            )
+            content = f.read()
+
+        # Replace CDATA placeholders first (these are our custom markers)
+        content = content.replace("%%CDATA_START%%", "<![CDATA[")
+        content = content.replace("%%CDATA_END%%", "]]>")
+
+        # Use unescape() to properly handle all HTML entities
+        # The default handles &amp; &lt; &gt; and we add &quot; and &apos;
+        content = unescape(content, {"&quot;": '"', "&apos;": "'"})
         with open(local_filename, "w", encoding="UTF-8") as f:
             f.write(content)
