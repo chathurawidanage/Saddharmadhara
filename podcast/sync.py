@@ -58,6 +58,19 @@ class PodcastSync:
             self.s3, self.state_file, self.sync_config.get("max_videos_per_day", 999)
         )
 
+    def _get_pub_date(self, info):
+        upload_timestamp = info.get("timestamp")
+        if upload_timestamp:
+            return email.utils.formatdate(upload_timestamp, usegmt=True)
+        elif info.get("upload_date"):
+            try:
+                dt = datetime.datetime.strptime(info["upload_date"], "%Y%m%d")
+                dt = dt.replace(tzinfo=datetime.timezone.utc)
+                return email.utils.format_datetime(dt)
+            except ValueError:
+                pass
+        return email.utils.formatdate(usegmt=True)
+
     def download_and_process(self, video_url):
         ydl_opts = {
             "format": "bestaudio/best",
@@ -96,8 +109,7 @@ class PodcastSync:
                 metadata["title"] = info.get("title", "No Title")
                 metadata["original_title"] = metadata["title"]
                 metadata["original_url"] = video_url
-                # todo set pub_date from video info
-                metadata["pub_date"] = email.utils.formatdate(usegmt=True)
+                metadata["pub_date"] = self._get_pub_date(info)
                 metadata["duration"] = info.get("duration", 0)
 
                 # Title/Description filter check BEFORE download

@@ -17,6 +17,13 @@ class RateLimiter:
         self.state = self.s3.load_state(self.state_file)
         self.state.setdefault("videos_synced_today", 0)
         self.state.setdefault("last_sync_time", None)
+        self.state.setdefault("last_sync_date", "")
+
+        # Daily Reset Logic (UTC)
+        today = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+        if self.state.get("last_sync_date") != today:
+            self.state["videos_synced_today"] = 0
+            self.state["last_sync_date"] = today
 
     # ---------------------------------------------------------------------
     # Periodic (time‑based) sync check
@@ -37,7 +44,11 @@ class RateLimiter:
         if not last_iso:
             return True, 0
         last_time = datetime.datetime.fromisoformat(last_iso)
-        elapsed = (datetime.datetime.now() - last_time).total_seconds()
+        if last_time.tzinfo is None:
+            last_time = last_time.astimezone(datetime.timezone.utc)
+        elapsed = (
+            datetime.datetime.now(datetime.timezone.utc) - last_time
+        ).total_seconds()
         period = self._period_seconds()
         if elapsed >= period:
             return True, 0
@@ -59,7 +70,9 @@ class RateLimiter:
         The updated state is persisted to S3.
         """
         self.state["videos_synced_today"] += 1
-        self.state["last_sync_time"] = datetime.datetime.now().isoformat()
+        self.state["last_sync_time"] = datetime.datetime.now(
+            datetime.timezone.utc
+        ).isoformat()
         self.s3.save_state(self.state_file, self.state)
 
     def reset_daily_counter(self):

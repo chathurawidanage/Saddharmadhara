@@ -2,9 +2,6 @@ import boto3
 import json
 import os
 from botocore.exceptions import ClientError
-from datetime import datetime
-
-
 from boto3.s3.transfer import TransferConfig
 
 
@@ -61,14 +58,9 @@ class S3Manager:
 
     def load_state(self, state_file):
         try:
-            state = self.get_json(state_file)
+            return self.get_json(state_file)
         except ClientError:
-            state = {"last_sync_date": "", "videos_synced_today": 0}
-
-        today = datetime.now().strftime("%Y-%m-%d")
-        if state.get("last_sync_date") != today:
-            state = {"last_sync_date": today, "videos_synced_today": 0}
-        return state
+            return {}
 
     def save_state(self, state_file, state):
         local_temp = f"temp_{state_file}"
