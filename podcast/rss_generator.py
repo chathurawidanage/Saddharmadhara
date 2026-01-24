@@ -1,3 +1,4 @@
+import re
 import xml.etree.ElementTree as ET
 from xml.sax.saxutils import unescape
 
@@ -121,12 +122,20 @@ class RSSGenerator:
         with open(local_filename, "r", encoding="UTF-8") as f:
             content = f.read()
 
-        # Replace CDATA placeholders first (these are our custom markers)
-        content = content.replace("%%CDATA_START%%", "<![CDATA[")
-        content = content.replace("%%CDATA_END%%", "]]>")
+        # Unescape only the content inside CDATA markers, then replace the markers
 
-        # Use unescape() to properly handle all HTML entities
-        # The default handles &amp; &lt; &gt; and we add &quot; and &apos;
-        content = unescape(content, {"&quot;": '"', "&apos;": "'"})
+        def unescape_cdata(match):
+            inner = match.group(1)
+            # Unescape HTML entities inside CDATA
+            unescaped = unescape(inner, {"&quot;": '"', "&apos;": "'"})
+            return f"<![CDATA[{unescaped}]]>"
+
+        content = re.sub(
+            r"%%CDATA_START%%(.*?)%%CDATA_END%%",
+            unescape_cdata,
+            content,
+            flags=re.DOTALL,
+        )
+
         with open(local_filename, "w", encoding="UTF-8") as f:
             f.write(content)

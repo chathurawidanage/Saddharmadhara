@@ -66,7 +66,9 @@ class S3Manager:
 
     def load_state(self, state_file):
         try:
-            return self.get_json(state_file)
+            state = self.get_json(state_file)
+            # get_json returns None for missing files or invalid JSON
+            return state if state is not None else {}
         except ClientError:
             return {}
 

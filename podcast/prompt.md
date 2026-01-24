@@ -15,11 +15,10 @@ Analyze the provided YouTube video and return a structured JSON response contain
    * Set to `true` if the content is purely verbal or if the whiteboard/smartboard usage is **supplementary** (i.e., the listener can follow the logic easily without seeing the board).
    * Set to `false` only if visual aids are **essential** to understanding (e.g., complex diagrams where the speaker refers to "this" or "that" without naming the concept).
 
-3. **Title Rewrite**:
-   * **Format**: `[Original Series Name & Episode Number] | [AI Summarized Descriptive Topic]`
-   * **Rule**: Explicitly extract the Series Name and the Episode/Index Number from the source title. These must appear at the start of the new title.
-   * **Zero-Hallucination Mode**: If you can't identify the Series Name and the Episode/Index Number from the source title, do not invent it to fill space. There can be titles without a series name or episode number.
-   * **Constraint**: Exclude the Thero's name from the title.
+3. **Title Metadata Extraction**:
+    * **series_name**: Extract the recurring show name from the source title. If none exists, return null.
+    * **episode_number**: Extract the specific index number as a string. If none exists, return null.
+    * **topic_summary**: Generate a concise, descriptive topic (3-10 words) based on the content.
 
 4. **Podcast Description (Sinhala)**:
    * **Language**: Sinhala.
@@ -34,6 +33,10 @@ Analyze the provided YouTube video and return a structured JSON response contain
 
 {
   "podcast_friendly": boolean,
-  "title": "string",
+  "title_components": {
+    "series_name": "string or null",
+    "episode_number": "string or null",
+    "topic_summary": "string"
+  },
   "description": "HTML_CONTENT_HERE"
 }

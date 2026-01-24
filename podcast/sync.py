@@ -16,6 +16,7 @@ import email.utils
 import datetime
 
 from title_matcher import is_thero_in_content, load_thero_data
+from title_formatter import get_safe_title
 from s3_manager import S3Manager
 from audio_processor import AudioProcessor
 from rss_generator import RSSGenerator
@@ -100,7 +101,6 @@ class PodcastSync:
                 metadata = {
                     "id": None,
                     "title": None,
-                    "original_title": None,
                     "original_url": None,
                     "s3_audio_url": None,
                     "s3_image_url": None,
@@ -123,7 +123,7 @@ class PodcastSync:
                 # Title/Description filter check BEFORE download
                 yt_description = info.get("description", "")
                 if "matcher" in self.config and not is_thero_in_content(
-                    metadata["original_title"], yt_description, self.config
+                    metadata["title"], yt_description, self.config
                 ):
                     print(
                         f"[{self.thero_name}] Skipping {metadata['id']}: Title mismatch. Saving ignore record."
@@ -147,6 +147,10 @@ class PodcastSync:
                         if metadata["ai_response"]:
                             print(
                                 f"[{self.thero_name}] AI metadata generated for {metadata['id']}."
+                            )
+                            # Validate and format title
+                            metadata["ai_response"]["title"] = get_safe_title(
+                                metadata["title"], metadata["ai_response"]
                             )
                     except AIRateLimitError as e:
                         print(f"[{self.thero_name}] AI Rate Limit reached: {e}")
@@ -419,3 +423,4 @@ def run_rss_update_workflow():
 
 if __name__ == "__main__":
     run_sync_workflow()
+    # run_rss_update_workflow()
