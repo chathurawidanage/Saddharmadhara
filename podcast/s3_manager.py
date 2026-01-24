@@ -5,10 +5,20 @@ from botocore.exceptions import ClientError
 from datetime import datetime
 
 
+from boto3.s3.transfer import TransferConfig
+
+
 class S3Manager:
     def __init__(self, endpoint, bucket, access_key, secret_key):
         self.bucket = bucket
         self.endpoint = endpoint
+        # Use a more robust config for proxied S3 backends
+        self.transfer_config = TransferConfig(
+            multipart_threshold=100 * 1024 * 1024,  # 100MB threshold
+            multipart_chunksize=100 * 1024 * 1024,  # 100MB chunks
+            max_concurrency=10,
+            use_threads=True,
+        )
         self.client = boto3.client(
             "s3",
             endpoint_url=endpoint,
@@ -31,6 +41,7 @@ class S3Manager:
             self.bucket,
             key,
             ExtraArgs={"ContentType": content_type},
+            Config=self.transfer_config,
         )
 
     def get_json(self, key):

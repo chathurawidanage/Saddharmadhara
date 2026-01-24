@@ -70,7 +70,7 @@ class RSSGenerator:
             rss_item = add_tag(channel, "item")
             add_tag(rss_item, "title", item.get("title", "No Title"))
 
-            desc = item.get("description", "").replace("\n", "<br />")
+            desc = item.get("description", "")
             add_tag(rss_item, "description", f"%%CDATA_START%%{desc}%%CDATA_END%%")
 
             add_tag(

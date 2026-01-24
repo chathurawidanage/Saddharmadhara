@@ -6,12 +6,12 @@
         "https://www.youtube.com/channel/UCFhy_YsPcufmBl4AqkvaUXA/videos"
     ],
     "ai_config": {
-        "enabled": false,
+        "enabled": true,
         "summarize": true,
         "check_podcast_friendly": true
     },
     "sync_config": {
-        "max_videos_per_day": 3
+        "max_videos_per_day": 1
     },
     "rss_filename": "podcast.xml",
     "s3": {

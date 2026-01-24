@@ -15,7 +15,7 @@ def test_thero_ai(thero_config_path, sample_video_url):
         )
         return
 
-    print(f"AI features are ENABLED. Calling Gemini...")
+    print("AI features are ENABLED. Calling Gemini...")
     ai_manager = AIManager()
 
     # In a real sync, we might have the transcript from yt-dlp.
