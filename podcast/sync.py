@@ -6,6 +6,7 @@ from metrics import (
     failure_counter,
     ai_failure_counter,
     ai_rate_limited_counter,
+    sync_run_counter,
 )
 import os
 import requests
@@ -293,6 +294,7 @@ class PodcastSync:
         return None
 
     def sync(self):
+        sync_run_counter.labels(thero=self.thero_id).inc()
         print(f"[{self.thero_name}] Starting sync...")
         urls = self.config.get("youtube_channel_urls", []) or [
             self.config.get("youtube_channel_url")

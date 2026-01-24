@@ -12,21 +12,27 @@ sync_lock = threading.Lock()
 
 @app.route("/sync", methods=["POST", "GET"])
 def trigger_sync():
-    """Triggers the podcast synchronization workflow synchronously."""
-    if sync_lock.locked():
+    """Triggers the podcast synchronization workflow asynchronously."""
+    if not sync_lock.acquire(blocking=False):
         return jsonify({"status": "error", "message": "Sync already in progress"}), 429
 
-    with sync_lock:
+    def background_sync():
         try:
             print("Starting scheduled sync...")
             run_sync_workflow()
             print("Scheduled sync completed.")
-            return jsonify(
-                {"status": "success", "message": "Sync completed successfully"}
-            ), 200
         except Exception as e:
             print(f"Error during sync: {e}")
-            return jsonify({"status": "error", "message": str(e)}), 500
+        finally:
+            sync_lock.release()
+
+    thread = threading.Thread(target=background_sync)
+    thread.start()
+
+    return (
+        jsonify({"status": "accepted", "message": "Sync started in background"}),
+        202,
+    )
 
 
 @app.route("/health", methods=["GET"])

@@ -27,3 +27,8 @@ ai_rate_limited_counter = Counter(
     "Total number of AI rate limit occurrences",
     ["thero"],
 )
+sync_run_counter = Counter(
+    "sync_runs_total",
+    "Total number of times the sync workflow is initiated",
+    ["thero"],
+)
