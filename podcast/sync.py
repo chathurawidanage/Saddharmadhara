@@ -178,7 +178,9 @@ class PodcastSync:
 
                 # Metadata Generation
                 desc_tmp = self.podcast_config["description_template"]
-                description = desc_tmp.format(title=title, original_url=video_url)
+                description = desc_tmp.format(
+                    title=title, original_url=video_url, original_title=original_title
+                )
                 if ai_data and ai_data.get("description"):
                     description += "<br /><br />" + ai_data["description"]
 
@@ -352,6 +354,10 @@ class PodcastSync:
         if self.ai_rate_limited:
             print(f"[{self.thero_name}] Sync partially halted due to AI Rate Limiting.")
 
+        self.refresh_rss()
+        print(f"[{self.thero_name}] Sync complete.")
+
+    def refresh_rss(self):
         # Refresh RSS
         print(f"[{self.thero_name}] Refreshing RSS feed...")
         metadata_keys = self.s3.list_metadata_files()
@@ -389,7 +395,7 @@ class PodcastSync:
         self.s3.upload_file(rss_file, rss_file, "application/xml")
         if os.path.exists(rss_file):
             os.remove(rss_file)
-        print(f"[{self.thero_name}] Sync complete.")
+        print(f"[{self.thero_name}] RSS refresh complete.")
 
 
 def run_sync_workflow():
@@ -404,6 +410,20 @@ def run_sync_workflow():
                 PodcastSync(config).sync()
             except Exception as e:
                 print(f"Error syncing {filename}: {e}")
+
+
+def run_rss_update_workflow():
+    theros_dir = os.path.join(os.path.dirname(__file__), "theros")
+    for filename in os.listdir(theros_dir):
+        if filename.endswith(".json") and "_thero" in filename:
+            try:
+                config = load_thero_data(os.path.join(theros_dir, filename))
+                if not config.get("enabled", True):
+                    print(f"Skipping {filename}: Disabled in config.")
+                    continue
+                PodcastSync(config).refresh_rss()
+            except Exception as e:
+                print(f"Error refreshing RSS for {filename}: {e}")
 
 
 if __name__ == "__main__":

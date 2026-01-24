@@ -1,7 +1,7 @@
 from flask import Flask, jsonify
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 import threading
-from sync import run_sync_workflow
+from sync import run_sync_workflow, run_rss_update_workflow
 import os
 
 app = Flask(__name__)
@@ -31,6 +31,36 @@ def trigger_sync():
 
     return (
         jsonify({"status": "accepted", "message": "Sync started in background"}),
+        202,
+    )
+
+
+@app.route("/sync/rss", methods=["POST", "GET"])
+def trigger_rss_sync():
+    """Triggers the RSS update workflow asynchronously."""
+    if not sync_lock.acquire(blocking=False):
+        return (
+            jsonify(
+                {"status": "error", "message": "Sync/RSS update already in progress"}
+            ),
+            429,
+        )
+
+    def background_rss_sync():
+        try:
+            print("Starting RSS update...")
+            run_rss_update_workflow()
+            print("RSS update completed.")
+        except Exception as e:
+            print(f"Error during RSS update: {e}")
+        finally:
+            sync_lock.release()
+
+    thread = threading.Thread(target=background_rss_sync)
+    thread.start()
+
+    return (
+        jsonify({"status": "accepted", "message": "RSS update started in background"}),
         202,
     )
 
