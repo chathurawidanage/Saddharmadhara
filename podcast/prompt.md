@@ -17,7 +17,8 @@ Analyze the provided YouTube video and return a structured JSON response contain
 
 3. **Title Rewrite**:
    * **Format**: `[Original Series Name & Episode Number] | [AI Summarized Descriptive Topic]`
-   * **Rule**: Explicitly extract the Series Name and the Episode/Index Number (e.g., 18, 05, Vol 1) from the source title. These must appear verbatim at the start of the new title.
+   * **Rule**: Explicitly extract the Series Name and the Episode/Index Number from the source title. These must appear at the start of the new title.
+   * **Zero-Hallucination Mode**: If you can't identify the Series Name and the Episode/Index Number from the source title, do not invent it to fill space. There can be titles without a series name or episode number.
    * **Constraint**: Exclude the Thero's name from the title.
 
 4. **Podcast Description (Sinhala)**:
