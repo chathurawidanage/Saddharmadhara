@@ -12,7 +12,6 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the application code
-COPY sync.py .
-COPY server.py .
+COPY . .
 # Run the server using gunicorn
 CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--timeout", "3600", "server:app"]
