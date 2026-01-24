@@ -1,4 +1,5 @@
 from flask import Flask, jsonify
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 import threading
 from sync import run_sync_workflow
 import os
@@ -31,6 +32,11 @@ def trigger_sync():
 @app.route("/health", methods=["GET"])
 def health_check():
     return jsonify({"status": "ok"}), 200
+
+
+@app.route("/metrics", methods=["GET"])
+def metrics():
+    return generate_latest(), 200, {"Content-Type": CONTENT_TYPE_LATEST}
 
 
 if __name__ == "__main__":

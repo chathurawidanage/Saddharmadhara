@@ -1,4 +1,12 @@
 import yt_dlp
+from metrics import (
+    attempt_counter,
+    success_counter,
+    skipped_counter,
+    failure_counter,
+    ai_failure_counter,
+    ai_rate_limited_counter,
+)
 import os
 import requests
 import json
@@ -108,12 +116,14 @@ class PodcastSync:
                                 title = ai_data["title"]
                     except AIRateLimitError as e:
                         print(f"[{self.thero_name}] AI Rate Limit reached: {e}")
+                        ai_rate_limited_counter.labels(thero=self.thero_id).inc()
                         self.ai_rate_limited = True
                         return None
                     except AIGenerationError as e:
                         print(
                             f"[{self.thero_name}] AI Generation failed for {vid_id}: {e}"
                         )
+                        ai_failure_counter.labels(thero=self.thero_id).inc()
                         return None
 
                 mp3_file, img_file = (
@@ -201,6 +211,8 @@ class PodcastSync:
                     os.remove(f)
 
     def process_video_task(self, item):
+        # Increment attempt counter for each video processed
+        attempt_counter.labels(thero=self.thero_id).inc()
         vid_id = item["id"]
         title = item.get("title")
         # Enforce periodic sync based on daily allowance regardless of AI rate limit
@@ -210,6 +222,7 @@ class PodcastSync:
             print(
                 f"[{self.thero_name}] Sync limited; waiting {wait_min} minutes before next attempt."
             )
+            skipped_counter.labels(thero=self.thero_id, reason="periodic_limit").inc()
             return None
         # Proceed with processing; after successful sync, RateLimiter will record success.
 
@@ -230,6 +243,9 @@ class PodcastSync:
                         )
                     else:
                         print(f"[{self.thero_name}] Skipping {vid_id}: Already exists.")
+                        skipped_counter.labels(
+                            thero=self.thero_id, reason="already_exists"
+                        ).inc()
                         return None
 
                 # If it's a mismatch, verify it STILL mismatches
@@ -252,16 +268,28 @@ class PodcastSync:
             print(
                 f"[{self.thero_name}] Skipping {vid_id}: Daily sync limit reached ({self.rate_limiter.max_per_day})."
             )
+            skipped_counter.labels(thero=self.thero_id, reason="daily_limit").inc()
             return None
 
-        result = self.download_and_process(item["url"])
+        try:
+            result = self.download_and_process(item["url"])
+        except Exception as e:
+            print(
+                f"[{self.thero_name}] Error during download_and_process for {vid_id}: {e}"
+            )
+            failure_counter.labels(thero=self.thero_id).inc()
+            return None
         if result == "ignored":
+            skipped_counter.labels(thero=self.thero_id, reason="title_mismatch").inc()
             return None
         if result:
             # Record successful sync via RateLimiter (updates counters and persists state)
             self.rate_limiter.record_success()
+            success_counter.labels(thero=self.thero_id).inc()
             print(f"[{self.thero_name}] Successfully synced {vid_id}.")
             return result
+        # If result is None and not ignored, treat as failure
+        failure_counter.labels(thero=self.thero_id).inc()
         return None
 
     def sync(self):

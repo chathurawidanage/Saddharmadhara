@@ -6,3 +6,4 @@ flask
 gunicorn
 thefuzz[speed]
 google-genai
+prometheus-client
