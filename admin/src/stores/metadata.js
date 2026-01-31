@@ -17,6 +17,8 @@ import {
   DHIS2_RETREAT_FINALIZED_ATTRIBUTE,
   DHIS2_ATTENDANCE_OPTION_SET_ID,
   DHIS2_RETREAT_ATTENDANCE_CONFIRMATION_DATE_ATTRIBUTE,
+  DHIS2_DASHBOARD_PARTICIPATION_SUMMARY_SQL_VIEW,
+  DHIS2_DASHBOARD_EOI_SUMMARY_SQL_VIEW,
 } from "../dhis2";
 
 // Retreats Transforming
@@ -129,6 +131,18 @@ const metadataQuery = {
     resource: `optionSets/${DHIS2_ATTENDANCE_OPTION_SET_ID}.json`,
     params: {
       fields: "options[code,name]",
+    },
+  },
+  participationSummary: {
+    resource: `sqlViews/${DHIS2_DASHBOARD_PARTICIPATION_SUMMARY_SQL_VIEW}/data.json`,
+    params: {
+      skipPaging: true,
+    },
+  },
+  eoiSummary: {
+    resource: `sqlViews/${DHIS2_DASHBOARD_EOI_SUMMARY_SQL_VIEW}/data.json`,
+    params: {
+      skipPaging: true,
     },
   },
 };
@@ -261,6 +275,98 @@ class MetadataStore {
     });
   };
 
+  get generalRetreatStats() {
+    if (!this.participationSummary || !this.eoiSummary || !this.retreats) {
+      console.log("Missing data for stats:", {
+        p: !!this.participationSummary,
+        e: !!this.eoiSummary,
+        r: !!this.retreats,
+      });
+      return {
+        totalParticipants: 0,
+        oneTimeParticipants: 0,
+        repeatParticipants: 0,
+        unableToParticipate: 0,
+      };
+    }
+
+    console.log("Raw participation:", this.participationSummary);
+    console.log("Raw EOI:", this.eoiSummary);
+    console.log("Retreats:", this.retreats);
+
+    // Filter General Retreats
+    // Filter General Retreats
+    const generalRetreatCodes = new Set(
+      this.retreats
+        .filter((r) => r.retreatType?.toLowerCase().includes("general"))
+        .flatMap((r) => [r.code, r.name])
+    );
+
+    // Process Participation
+    const participantCounts = {};
+    const processedUids = new Set(); // To count unique participants efficiently
+
+    this.participationSummary.listGrid?.rows?.forEach((row) => {
+      const yogiUid = row[0];
+      const retreatCode = row[1];
+
+      if (generalRetreatCodes.has(retreatCode)) {
+        participantCounts[yogiUid] = (participantCounts[yogiUid] || 0) + 1;
+        processedUids.add(yogiUid);
+      }
+    });
+
+    const totalParticipants = processedUids.size;
+    let oneTimeParticipants = 0;
+    let repeatParticipants = 0;
+
+    const repeatBreakdown = {};
+
+    Object.values(participantCounts).forEach((count) => {
+      if (count === 1) oneTimeParticipants++;
+      else if (count > 1) {
+        repeatParticipants++;
+        repeatBreakdown[count] = (repeatBreakdown[count] || 0) + 1;
+      }
+    });
+
+    // Process EOI for "Unable to Participate" (aka Waiting for Invitation)
+    // Logic: Applied to a General retreat (in EOI) AND never invited to ANY General Retreat AND never participated
+    const invitedUids = new Set();
+    const applicantUids = new Set();
+
+    this.eoiSummary.listGrid?.rows?.forEach((row) => {
+      const yogiUid = row[0];
+      const retreatCode = row[1];
+      const invitationSent = row[2]; // Index 2 is now invitation_sent
+
+      if (generalRetreatCodes.has(retreatCode)) {
+        applicantUids.add(yogiUid);
+        if (invitationSent === "true") {
+          invitedUids.add(yogiUid);
+        }
+      }
+    });
+
+    const waitingForInvitationUids = new Set();
+    applicantUids.forEach((uid) => {
+      // If never invited AND never participated
+      if (!invitedUids.has(uid) && !processedUids.has(uid)) {
+        waitingForInvitationUids.add(uid);
+      }
+    });
+
+    const stats = {
+      totalParticipants,
+      totalApplicants: applicantUids.size,
+      repeatBreakdown,
+      oneTimeParticipants,
+      repeatParticipants,
+      unableToParticipate: waitingForInvitationUids.size,
+    };
+    return stats;
+  }
+
   init = async () => {
     let response = await this.engine.query(metadataQuery);
     runInAction(() => {
@@ -270,6 +376,8 @@ class MetadataStore {
       this.rooms = transformRooms(response.rooms);
       this.languages = transformLanguages(response.languages);
       this.attendance = transformAttendance(response.attendance);
+      this.participationSummary = response.participationSummary; // Store raw response
+      this.eoiSummary = response.eoiSummary; // Store raw response
       this.fetchSmsCredits();
     });
   };
