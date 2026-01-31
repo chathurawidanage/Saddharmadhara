@@ -142,6 +142,20 @@ const RetreatsDashboard = observer(({ store }) => {
         <div className="stat-card-wrapper">
           <div className="stat-title">Total Retreats</div>
           <div className="stat-value">{store.metadata.retreats.length}</div>
+          <div style={{ fontSize: "0.85em", color: "#6e7a8a", marginTop: 4 }}>
+            General:{" "}
+            {
+              store.metadata.retreats.filter((r) =>
+                r.retreatType?.toLowerCase().includes("general"),
+              ).length
+            }{" "}
+            | Silent:{" "}
+            {
+              store.metadata.retreats.filter((r) =>
+                r.retreatType?.toLowerCase().includes("silent"),
+              ).length
+            }
+          </div>
           <FiLayers className="stat-icon" />
         </div>
         <div className="stat-card-wrapper bg-danger-light">
