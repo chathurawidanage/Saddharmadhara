@@ -1,6 +1,7 @@
 import { ENGLISH_LOCALE } from "../locale/english";
 import { SINHALA_LOCALE } from "../locale/sinhala";
 import {
+  DHIS2_RETREAT_ATTRIBUTE_ACCOMMODATION_NOT_PROVIDED,
   DHIS2_RETREAT_ATTRIBUTE_ACCOMMODATION_OPTIONAL,
   DHIS2_RETREAT_ATTRIBUTE_DATE,
   DHIS2_RETREAT_ATTRIBUTE_DAYS,
@@ -14,6 +15,20 @@ const attendancePage = (retreatObj, teiName: string) => {
   );
   let accommodationOptional =
     retreatObj.attributes[DHIS2_RETREAT_ATTRIBUTE_ACCOMMODATION_OPTIONAL];
+  let accommodationNotProvided = retreatObj.attributes[DHIS2_RETREAT_ATTRIBUTE_ACCOMMODATION_NOT_PROVIDED];
+
+  let description = {
+    [ENGLISH_LOCALE]: "",
+    [SINHALA_LOCALE]: ""
+  };
+
+  if (accommodationNotProvided === "true") {
+    description = {
+      [ENGLISH_LOCALE]: "Accommodation will not be provided for this program. Please make your own arrangements.",
+      [SINHALA_LOCALE]: "මෙම වැඩසටහන සඳහා නේවාසික පහසුකම් සපයනු නොලැබේ. එබැවින්, ඔබගේ නේවාසික පහසුකම් පෞද්ගලිකව සලසා ගත යුතු බව කරුණාවෙන් සලකන්න."
+    }
+  }
+
   return {
     name: "Attendance",
     title: {
@@ -37,8 +52,9 @@ const attendancePage = (retreatObj, teiName: string) => {
             year: "numeric",
             month: "short",
             day: "numeric",
-          })} දක්වා දක්වා පැවැත්වෙන දින ${noOfDays}ක සද්ධර්මධාරා නේවාසික වැඩසටහන හා සම්බන්ධවීමට තේරී පත් ව ඇත. කරුණාකර ඔබගේ සහභාගිත්වය තහවුරු කරන්න.`,
+          })} දක්වා දක්වා පැවැත්වෙන දින ${noOfDays}ක සද්ධර්මධාරා වැඩසටහන හා සම්බන්ධවීමට තේරී පත් ව ඇත. කරුණාකර ඔබගේ සහභාගිත්වය තහවුරු කරන්න.`,
         },
+        description,
         isRequired: true,
         labelTrue: {
           [ENGLISH_LOCALE]: "Attending",
@@ -57,8 +73,7 @@ const attendancePage = (retreatObj, teiName: string) => {
           [SINHALA_LOCALE]: `මෙම වැඩසටහන සඳහා ඔබ,`,
         },
         isRequired: true,
-        visibleIf: "{RSVP}",
-        visible: accommodationOptional === "true",
+        visibleIf: `{RSVP} = 'true' and ${accommodationOptional} = 'true'`,
         labelTrue: {
           [ENGLISH_LOCALE]: "Commute daily from home",
           [SINHALA_LOCALE]: "නිවසේ සිට දිනපතා පැමිණෙයි.",
