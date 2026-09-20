@@ -102,16 +102,16 @@ The penalty score starts at `0` and accumulates deductions:
    If the yogi had a "No-Show" (`AttendanceState.NOSHOW`) on any retreat starting **within the last year (365 days)**:
    $$\text{Deduction} = -25$$
 
-2. **Double/Multiple Bookings in Same Season**:
-   Checks other expressions of interest (EOIs) in the same season as the current retreat (excluding the current retreat itself):
-   * Count an EOI as a duplicate request if it is in `SELECTED` state, or `PENDING` state (excluding stale pending states where the retreat has already started/ended).
-   * Let $C_{\text{season}}$ be the count of these active selected/pending registrations.
-   * If $C_{\text{season}} > 0$, the penalty is calculated as:
-     $$\text{Deduction} = -25 - 50 \times (C_{\text{season}} - 1)$$
+2. **Multiple Bookings for Active/Upcoming Retreats**:
+   Checks other expressions of interest (EOIs) for active or upcoming retreats across all seasons (excluding the current retreat itself and any past/concluded retreats):
+   * Count an EOI as an active booking if it is in `SELECTED` or `PENDING` state and the retreat date has not yet passed (`retreat.date >= now`).
+   * Let $C_{\text{upcoming}}$ be the count of these active selected/pending registrations.
+   * If $C_{\text{upcoming}} > 0$, the penalty is calculated as:
+     $$\text{Deduction} = -25 - 50 \times (C_{\text{upcoming}} - 1)$$
      * Examples:
-       * 1 active registration: **$-25$**
-       * 2 active registrations: **$-75$**
-       * 3 active registrations: **$-125$**
+       * 1 active upcoming registration: **$-25$**
+       * 2 active upcoming registrations: **$-75$**
+       * 3 active upcoming registrations: **$-125$**
 
 ---
 

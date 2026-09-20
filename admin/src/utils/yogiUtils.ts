@@ -383,42 +383,43 @@ export const getYogiSortScore = (
     }
   }
 
-  let selectionInSeasonCount = 0;
-  const inSeasonDeductionItemsList: { label: string; points: number }[] = [];
-  if (currentRetreat?.season) {
-    Object.entries(yogiObj.expressionOfInterests || {}).forEach(([code, eoi]) => {
-      if (code === currentRetreat.code) {
-        return;
-      }
-      const retreat = allRetreats.find((r) => r.code === code);
-      if (retreat && retreat.season === currentRetreat.season) {
-        const rCodeStr = retreat.retreatCode || retreat.name || code;
-        if (eoi.state === SelectionState.SELECTED) {
-          selectionInSeasonCount++;
-          const pts = selectionInSeasonCount === 1 ? -25 : -50;
-          inSeasonDeductionItemsList.push({
-            label: `Selected for ${rCodeStr} (In-season)`,
-            points: pts,
-          });
-        } else if (eoi.state === SelectionState.PENDING) {
-          const isPastRetreat = retreat.date && new Date(retreat.date).getTime() < Date.now();
-          if (!isPastRetreat) {
-            selectionInSeasonCount++;
-            const pts = selectionInSeasonCount === 1 ? -25 : -50;
-            inSeasonDeductionItemsList.push({
-              label: `Pending for ${rCodeStr} (In-season)`,
-              points: pts,
-            });
-          }
-        }
-      }
-    });
-  }
+  let upcomingSelectionCount = 0;
+  const upcomingDeductionItemsList: { label: string; points: number }[] = [];
+  Object.entries(yogiObj.expressionOfInterests || {}).forEach(([code, eoi]) => {
+    if (currentRetreat && code === currentRetreat.code) {
+      return;
+    }
+    const retreat = allRetreats.find((r) => r.code === code);
+    if (!retreat) return;
 
-  if (selectionInSeasonCount > 0) {
-    const seasonDeduction = -25 - 50 * (selectionInSeasonCount - 1);
-    sDeduction += seasonDeduction;
-    inSeasonDeductionItemsList.forEach((item) => {
+    // Check if the retreat is in the future (not started yet)
+    const isFutureRetreat = retreat.date && new Date(retreat.date).getTime() >= Date.now();
+    if (!isFutureRetreat) return;
+
+    const rCodeStr = retreat.retreatCode || retreat.name || code;
+    const stateStr = String(eoi?.state || "").toLowerCase();
+
+    if (stateStr === SelectionState.SELECTED) {
+      upcomingSelectionCount++;
+      const pts = upcomingSelectionCount === 1 ? -25 : -50;
+      upcomingDeductionItemsList.push({
+        label: `Selected for ${rCodeStr} (Upcoming)`,
+        points: pts,
+      });
+    } else if (stateStr === SelectionState.PENDING) {
+      upcomingSelectionCount++;
+      const pts = upcomingSelectionCount === 1 ? -25 : -50;
+      upcomingDeductionItemsList.push({
+        label: `Pending for ${rCodeStr} (Upcoming)`,
+        points: pts,
+      });
+    }
+  });
+
+  if (upcomingSelectionCount > 0) {
+    const upcomingDeduction = -25 - 50 * (upcomingSelectionCount - 1);
+    sDeduction += upcomingDeduction;
+    upcomingDeductionItemsList.forEach((item) => {
       deductionItems.push({
         label: item.label,
         points: item.points,

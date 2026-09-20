@@ -156,7 +156,7 @@ describe("YogiList Sorting Helpers", () => {
     expect(scoreOld.breakdown.deductions.score).toBe(0);
   });
 
-  test("getYogiSortScore reduces marks for every occurrence of hasSelectionInSeason (50 for first, 25 for subsequent)", () => {
+  test("getYogiSortScore reduces marks for active/upcoming selections irrespective of season (-25 for first, -50 for subsequent)", () => {
     const yogiWithOneOccurrence = {
       attributes: { dob: "1990-01-01" }, // age score: 50
       expressionOfInterests: {
@@ -179,14 +179,19 @@ describe("YogiList Sorting Helpers", () => {
 
     const allRetreats = [
       { code: "R1", season: "S1", date: "2027-06-15" },
-      { code: "R2", season: "S1", date: "2027-06-20" },
-      { code: "R3", season: "S1", date: "2027-06-25" },
+      { code: "R2", season: "S2", date: "2027-06-20" }, // Note: Different season (S2), still triggers deduction
+      { code: "R3", season: "S3", date: "2027-06-25" }, // Note: Different season (S3), still triggers deduction
       { code: "R4", season: "S1", date: "2027-06-30" },
     ] as any[];
 
     // 1 occurrence deduction: -25
     const resOne = getYogiSortScore(yogiWithOneOccurrence, allRetreats, [], allRetreats[1]);
     expect(resOne.breakdown.deductions.score).toBe(-25);
+    expect(resOne.breakdown.deductions.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ label: "Selected for R1 (Upcoming)", points: -25 }),
+      ]),
+    );
 
     // 3 occurrences deduction: -25 - 50 * 2 = -125
     const resThree = getYogiSortScore(yogiWithThreeOccurrences, allRetreats, [], allRetreats[3]);
