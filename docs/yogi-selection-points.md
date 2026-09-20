@@ -60,21 +60,30 @@ The age of the yogi is calculated from their Date of Birth (`dob`) relative to t
 ---
 
 ### C. Participation Score ($S_{\text{participation}}$)
-To ensure fair rotation, the system checks the applicant's attendance history for general and silent retreats.
-Let:
-* **$N_{\text{general}}$**: Count of attended general retreats.
-* **$N_{\text{silent}}$**: Count of attended silent retreats.
+To ensure fair rotation and reward time spent waiting, the system applies a **time-decay quadratic deduction** for attended retreats within the last 2 years (730 days).
 
-The score starts at a base of `100` and is modified depending on the **type of the current retreat**:
+For each attended retreat at time $t$ (days elapsed since retreat date):
+$$\text{Deduction}(t) = \text{round}\left( -D_{\max} \times \left(1 - \frac{t}{730}\right)^2 \right)$$
+where $D_{\max} = 20$ (`MAX_PARTICIPATION_DEDUCTION`).
+
+* Decay trajectory:
+  * **Day 0 (Just attended)**: $-20$
+  * **3 months (90 days)**: $-15$
+  * **6 months (180 days)**: $-11$
+  * **1 year (365 days)**: $-5$
+  * **1.5 years (550 days)**: $-1$
+  * **2 years (730 days)**: $0$
+
+The score starts at a base of `100` and accumulates modifications depending on the **type of the current retreat**:
 
 * **If the current retreat is a General Retreat**:
-  $$S_{\text{participation}} = 100 - (20 \times N_{\text{general}}) + (10 \times N_{\text{silent}})$$
-  *Attending more General retreats reduces priority for future General retreats ($-20$ per attendance), but attending Silent retreats boosts it ($+10$ per attendance).*
+  $$S_{\text{participation}} = 100 + \sum \text{Deduction}(t_{\text{general}}) + (10 \times N_{\text{silent}})$$
+  *Attending General retreats reduces priority with quadratic time decay (max $-20$ per retreat), but attending Silent retreats adds a bonus ($+10$ per attendance).*
 * **If the current retreat is a Silent Retreat**:
-  $$S_{\text{participation}} = 100 - (10 \times N_{\text{silent}})$$
-  *Attending more Silent retreats reduces priority for future Silent retreats ($-10$ per attendance).*
+  $$S_{\text{participation}} = 100 + \sum \text{Deduction}(t_{\text{silent}})$$
+  *Attending Silent retreats reduces priority with quadratic time decay (max $-20$ per retreat).*
 * **If current retreat type is unspecified**:
-  $$S_{\text{participation}} = 100$$
+  $$S_{\text{participation}} = 100 + \sum \text{Deduction}(t_{\text{general}}) + (10 \times N_{\text{silent}})$$
 
 * **Dhamma Seva Boost**:
   If the yogi has attended at least one **Dhamma Seva** (`dhamma-seva`) retreat within the last 2 years, they receive a boost of `+100` points added to $S_{\text{participation}}$:

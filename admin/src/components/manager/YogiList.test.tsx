@@ -6,6 +6,8 @@ import {
   SELECTION_PRIORITY_SORT,
   FIRST_TIME_YOGI_BOOST,
   DHAMMA_SEVA_BOOST,
+  MAX_PARTICIPATION_DEDUCTION,
+  calculateParticipationDecayDeduction,
 } from "../../utils/yogiUtils";
 import { SelectionState } from "../../types/domain";
 
@@ -439,6 +441,145 @@ describe("YogiList Sorting Helpers", () => {
 
     // No-show does not receive boost
     expect(resNoShow.breakdown.participation.items).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ label: "Dhamma Seva Boost" }),
+      ]),
+    );
+  });
+
+  test("calculateParticipationDecayDeduction applies quadratic decay from -20 to 0", () => {
+    const now = Date.now();
+    const dayMs = 86400000;
+
+    // Day 0: -20
+    expect(calculateParticipationDecayDeduction(new Date(now))).toBe(-MAX_PARTICIPATION_DEDUCTION);
+    // 30 days: -18
+    expect(calculateParticipationDecayDeduction(new Date(now - 30 * dayMs))).toBe(-18);
+    // 90 days (3 months): -15
+    expect(calculateParticipationDecayDeduction(new Date(now - 90 * dayMs))).toBe(-15);
+    // 180 days (6 months): -11
+    expect(calculateParticipationDecayDeduction(new Date(now - 180 * dayMs))).toBe(-11);
+    // 365 days (1 year): -5
+    expect(calculateParticipationDecayDeduction(new Date(now - 365 * dayMs))).toBe(-5);
+    // 550 days (1.5 years): -1
+    expect(calculateParticipationDecayDeduction(new Date(now - 550 * dayMs))).toBe(-1);
+    // 730 days (2 years): 0
+    expect(calculateParticipationDecayDeduction(new Date(now - 730 * dayMs))).toBe(0);
+    // Beyond 2 years: 0
+    expect(calculateParticipationDecayDeduction(new Date(now - 800 * dayMs))).toBe(0);
+  });
+
+  test("getYogiSortScore applies quadratic decay deductions for attended retreats based on their date", () => {
+    const now = Date.now();
+    const dayMs = 86400000;
+
+    const currentSilentRetreat = {
+      code: "CURR_SILENT",
+      retreatType: "silent",
+      date: new Date(now),
+    } as any;
+
+    const attendedSilent1 = {
+      code: "ATT_SILENT_1",
+      retreatType: "silent",
+      retreatCode: "5SS28",
+      date: new Date(now - 90 * dayMs), // 3 months ago: -15
+    } as any;
+
+    const attendedSilent2 = {
+      code: "ATT_SILENT_2",
+      retreatType: "silent",
+      retreatCode: "5SS21",
+      date: new Date(now - 365 * dayMs), // 1 year ago: -5
+    } as any;
+
+    const yogi = {
+      attributes: { dob: "1990-01-01" }, // age score: 50
+      expressionOfInterests: {
+        CURR_SILENT: { state: SelectionState.APPLIED, occurredAt: "2026-08-01" },
+      },
+      participation: {
+        ATT_SILENT_1: { retreat: "ATT_SILENT_1", attendance: "attended" },
+        ATT_SILENT_2: { retreat: "ATT_SILENT_2", attendance: "attended" },
+      },
+    } as any;
+
+    const allRetreats = [currentSilentRetreat, attendedSilent1, attendedSilent2];
+    const result = getYogiSortScore(yogi, allRetreats, [], currentSilentRetreat);
+
+    // base 100 + (-15 from ATT_SILENT_1) + (-5 from ATT_SILENT_2) = 80
+    expect(result.breakdown.participation.score).toBe(80);
+    expect(result.breakdown.participation.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ label: "Attended Silent (5SS28)", points: -15, type: "deduction" }),
+        expect.objectContaining({ label: "Attended Silent (5SS21)", points: -5, type: "deduction" }),
+      ]),
+    );
+  });
+
+  test("getYogiSortScore treats unmarked concluded retreats in SELECTED state as attended for deductions and Dhamma Seva boost", () => {
+    const now = Date.now();
+    const dayMs = 86400000;
+
+    const currentRetreat = {
+      code: "CURR_RETREAT",
+      retreatType: "silent",
+      date: new Date(now + 10 * dayMs),
+    } as any;
+
+    const pastDhammaSeva = {
+      code: "PAST_DS",
+      retreatType: "dhamma-seva",
+      retreatCode: "21DS01",
+      date: new Date(now - 30 * dayMs),
+      endDate: new Date(now - 9 * dayMs), // ended 9 days ago
+    } as any;
+
+    const pastSilent = {
+      code: "PAST_SILENT",
+      retreatType: "silent",
+      retreatCode: "5SS28",
+      date: new Date(now - 90 * dayMs), // 3 months ago: -15
+      endDate: new Date(now - 85 * dayMs),
+    } as any;
+
+    // Yogi has no participation records, but was SELECTED for past concluded retreats
+    const yogi = {
+      attributes: { dob: "1990-01-01" },
+      expressionOfInterests: {
+        CURR_RETREAT: { state: SelectionState.APPLIED, occurredAt: "2026-08-01" },
+        PAST_DS: { state: SelectionState.SELECTED, occurredAt: "2026-07-01" },
+        PAST_SILENT: { state: SelectionState.SELECTED, occurredAt: "2026-05-01" },
+      },
+      participation: {},
+    } as any;
+
+    const allRetreats = [currentRetreat, pastDhammaSeva, pastSilent];
+    const result = getYogiSortScore(yogi, allRetreats, [], currentRetreat);
+
+    // Dhamma Seva boost (+100) + base 100 + deduction for past silent (-15) = 185
+    expect(result.breakdown.participation.score).toBe(100 + DHAMMA_SEVA_BOOST - 15);
+    expect(result.breakdown.participation.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ label: "Dhamma Seva Boost", points: DHAMMA_SEVA_BOOST }),
+        expect.objectContaining({ label: "Attended Silent (5SS28)", points: -15, type: "deduction" }),
+      ]),
+    );
+
+    // If the yogi was explicitly marked as noshow, they should NOT be treated as attended
+    const yogiNoShow = {
+      attributes: { dob: "1990-01-01" },
+      expressionOfInterests: {
+        CURR_RETREAT: { state: SelectionState.APPLIED, occurredAt: "2026-08-01" },
+        PAST_DS: { state: SelectionState.SELECTED, occurredAt: "2026-07-01" },
+      },
+      participation: {
+        PAST_DS: { retreat: "PAST_DS", attendance: "noshow" },
+      },
+    } as any;
+
+    const resultNoShow = getYogiSortScore(yogiNoShow, allRetreats, [], currentRetreat);
+    expect(resultNoShow.breakdown.participation.items).not.toEqual(
       expect.arrayContaining([
         expect.objectContaining({ label: "Dhamma Seva Boost" }),
       ]),

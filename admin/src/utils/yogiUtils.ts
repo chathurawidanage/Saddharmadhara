@@ -4,11 +4,36 @@ import { isGeneralRetreat, isSilentRetreat, isDhammaSevaRetreat } from "./retrea
 export const SELECTION_PRIORITY_SORT = "selection-priority";
 export const AGE_SORT = "age";
 export const PARTICIPATION_LOOKBACK_YEARS = 2;
+export const PARTICIPATION_LOOKBACK_DAYS = 730;
+export const MAX_PARTICIPATION_DEDUCTION = 20;
 export const FIRST_TIME_YOGI_BOOST = 50;
 export const ORDINATION_INTENDED_BOOST = 25;
 export const DHAMMA_SEVA_BOOST = 100;
 export const DISCRETIONARY_QUOTA_PERCENTAGE = 0.07;
 export const DISCRETIONARY_QUOTA_MAX_CAP = 4;
+
+/**
+ * Calculates time-decay participation deduction using quadratic curve (Equation 2):
+ * Deduction(t) = -MAX_PARTICIPATION_DEDUCTION * (1 - t / 730)^2
+ * - High decay initially (-20 max at t=0, ~ -15 at 3mo, ~ -11 at 6mo, ~ -5 at 1yr)
+ * - Smoothly approaches 0 at 2 years mark (730 days)
+ */
+export const calculateParticipationDecayDeduction = (
+  retreatDate: Date | string,
+  maxDeduction = MAX_PARTICIPATION_DEDUCTION,
+  lookbackDays = PARTICIPATION_LOOKBACK_DAYS,
+): number => {
+  const dateObj = typeof retreatDate === "string" ? new Date(retreatDate) : retreatDate;
+  const timeDiff = Date.now() - dateObj.getTime();
+  const daysElapsed = Math.max(0, timeDiff / (1000 * 60 * 60 * 24));
+
+  if (daysElapsed >= lookbackDays) {
+    return 0;
+  }
+
+  const decayFactor = Math.pow(1 - daysElapsed / lookbackDays, 2);
+  return Math.round(-maxDeduction * decayFactor);
+};
 
 export interface StatusBreakdown {
   score: number;
@@ -150,17 +175,18 @@ export const getYogiSortScore = (
   const participationCutoffDate = new Date();
   participationCutoffDate.setFullYear(participationCutoffDate.getFullYear() - PARTICIPATION_LOOKBACK_YEARS);
 
-  let nGeneral = 0;
-  let nSilent = 0;
   let nDhammaSeva = 0;
-  const attendedGeneralRetreats: string[] = [];
-  const attendedSilentRetreats: string[] = [];
+  const attendedGeneralRetreats: { code: string; date: Date }[] = [];
+  const attendedSilentRetreats: { code: string; date: Date }[] = [];
   const attendedDhammaSevaRetreats: string[] = [];
+
+  const processedRetreatCodes = new Set<string>();
 
   Object.values(yogiObj.participation || {}).forEach((p) => {
     if (p.attendance === AttendanceState.ATTENDED) {
       const retreat = allRetreats.find((r) => r.code === p.retreat);
       if (retreat && retreat.date) {
+        processedRetreatCodes.add(retreat.code);
         const retreatDate = new Date(retreat.date);
         if (retreatDate >= participationCutoffDate) {
           const retreatNameOrCode = retreat.retreatCode || p.retreat;
@@ -168,11 +194,48 @@ export const getYogiSortScore = (
             nDhammaSeva++;
             attendedDhammaSevaRetreats.push(retreatNameOrCode);
           } else if (isGeneralRetreat(retreat)) {
-            nGeneral++;
-            attendedGeneralRetreats.push(retreatNameOrCode);
+            attendedGeneralRetreats.push({ code: retreatNameOrCode, date: retreatDate });
           } else if (isSilentRetreat(retreat)) {
-            nSilent++;
-            attendedSilentRetreats.push(retreatNameOrCode);
+            attendedSilentRetreats.push({ code: retreatNameOrCode, date: retreatDate });
+          }
+        }
+      }
+    }
+  });
+
+  // Also consider retreats that are already over where attendance was not explicitly marked,
+  // leaving the yogi in SELECTED state (treated as attended unless marked noshow/absent).
+  Object.entries(yogiObj.expressionOfInterests || {}).forEach(([code, eoi]) => {
+    if (currentRetreat && code === currentRetreat.code) return;
+    if (processedRetreatCodes.has(code)) return;
+
+    const stateStr = String(eoi?.state || "").toLowerCase();
+    if (stateStr === SelectionState.SELECTED) {
+      const retreat = allRetreats.find((r) => r.code === code);
+      if (retreat && retreat.date) {
+        const retreatEndDate = retreat.endDate ? new Date(retreat.endDate) : new Date(retreat.date);
+        const isRetreatOver = retreatEndDate.getTime() < Date.now();
+        if (isRetreatOver) {
+          const existingPart = yogiObj.participation?.[code];
+          const wasMarkedAbsentOrNoShow =
+            existingPart &&
+            (existingPart.attendance === AttendanceState.NOSHOW ||
+              existingPart.attendance === AttendanceState.ABSENT);
+
+          if (!wasMarkedAbsentOrNoShow) {
+            processedRetreatCodes.add(retreat.code);
+            const retreatDate = new Date(retreat.date);
+            if (retreatDate >= participationCutoffDate) {
+              const retreatNameOrCode = retreat.retreatCode || code;
+              if (isDhammaSevaRetreat(retreat)) {
+                nDhammaSeva++;
+                attendedDhammaSevaRetreats.push(retreatNameOrCode);
+              } else if (isGeneralRetreat(retreat)) {
+                attendedGeneralRetreats.push({ code: retreatNameOrCode, date: retreatDate });
+              } else if (isSilentRetreat(retreat)) {
+                attendedSilentRetreats.push({ code: retreatNameOrCode, date: retreatDate });
+              }
+            }
           }
         }
       }
@@ -185,15 +248,17 @@ export const getYogiSortScore = (
   ];
 
   if (currentRetreat && isGeneralRetreat(currentRetreat)) {
-    sParticipation = 100 - 20 * nGeneral + 10 * nSilent;
-    attendedGeneralRetreats.forEach((code) => {
+    attendedGeneralRetreats.forEach(({ code, date }) => {
+      const pts = calculateParticipationDecayDeduction(date);
+      sParticipation += pts;
       participationItems.push({
         label: `Attended General (${code})`,
-        points: -20,
-        type: "deduction",
+        points: pts,
+        type: pts === 0 ? "info" : "deduction",
       });
     });
-    attendedSilentRetreats.forEach((code) => {
+    attendedSilentRetreats.forEach(({ code }) => {
+      sParticipation += 10;
       participationItems.push({
         label: `Attended Silent (${code})`,
         points: 10,
@@ -201,25 +266,29 @@ export const getYogiSortScore = (
       });
     });
   } else if (currentRetreat && isSilentRetreat(currentRetreat)) {
-    sParticipation = 100 - 10 * nSilent;
-    attendedSilentRetreats.forEach((code) => {
+    attendedSilentRetreats.forEach(({ code, date }) => {
+      const pts = calculateParticipationDecayDeduction(date);
+      sParticipation += pts;
       participationItems.push({
         label: `Attended Silent (${code})`,
-        points: -10,
-        type: "deduction",
+        points: pts,
+        type: pts === 0 ? "info" : "deduction",
       });
     });
   } else if (currentRetreat && isDhammaSevaRetreat(currentRetreat)) {
     sParticipation = 100;
   } else {
-    attendedGeneralRetreats.forEach((code) => {
+    attendedGeneralRetreats.forEach(({ code, date }) => {
+      const pts = calculateParticipationDecayDeduction(date);
+      sParticipation += pts;
       participationItems.push({
         label: `Attended General (${code})`,
-        points: -20,
-        type: "deduction",
+        points: pts,
+        type: pts === 0 ? "info" : "deduction",
       });
     });
-    attendedSilentRetreats.forEach((code) => {
+    attendedSilentRetreats.forEach(({ code }) => {
+      sParticipation += 10;
       participationItems.push({
         label: `Attended Silent (${code})`,
         points: 10,
