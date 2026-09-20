@@ -245,10 +245,16 @@ export const getYogiSortScore = (
       return false;
     }
     const stateStr = String(eoi?.state || "").toLowerCase();
-    return (
-      stateStr === SelectionState.SELECTED ||
-      stateStr === SelectionState.PENDING
-    );
+    if (stateStr === SelectionState.SELECTED) {
+      return true;
+    }
+    if (stateStr === SelectionState.PENDING) {
+      const retreat = allRetreats.find((r) => r.code === code);
+      const isPastRetreat =
+        retreat?.date && new Date(retreat.date).getTime() < Date.now();
+      return !isPastRetreat;
+    }
+    return false;
   });
 
   if (!hasParticipationEver && !hasBeenSelectedOrPendingEver) {

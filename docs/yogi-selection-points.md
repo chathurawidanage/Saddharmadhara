@@ -81,7 +81,7 @@ The score starts at a base of `100` and is modified depending on the **type of t
   $$\text{Boost} = +100$$
 
 * **First-Time Yogi Boost**:
-  If the yogi has never attended any retreat and has never been in `SELECTED` or `PENDING` state for any other retreat, an additional boost is added to $S_{\text{participation}}$:
+  If the yogi has never attended any retreat and has never been in `SELECTED` or active `PENDING` state for any other retreat (excluding stale `PENDING` states where the retreat date has already passed), an additional boost is added to $S_{\text{participation}}$:
   $$\text{Boost} = +50$$
 
 ---

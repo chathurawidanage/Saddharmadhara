@@ -263,6 +263,50 @@ describe("YogiList Sorting Helpers", () => {
         expect.objectContaining({ label: "First-time Yogi Boost" }),
       ]),
     );
+
+    // Yogi whose pending retreat date is in the past gets the first-time boost (stale/expired pending)
+    const pastRetreat = {
+      code: "R_PAST",
+      retreatType: "general",
+      date: new Date(Date.now() - 86400000 * 30), // 30 days ago
+    } as any;
+    const pastPendingYogi = {
+      attributes: { dob: "1990-01-01" },
+      expressionOfInterests: {
+        R1: { state: SelectionState.APPLIED, occurredAt: "2024-01-01" },
+        R_PAST: { state: SelectionState.PENDING, occurredAt: "2024-01-01" },
+      },
+      participation: {},
+    } as any;
+    const resPastPending = getYogiSortScore(pastPendingYogi, [currentRetreat, pastRetreat], [], currentRetreat);
+    expect(resPastPending.breakdown.participation.score).toBe(100 + FIRST_TIME_YOGI_BOOST);
+    expect(resPastPending.breakdown.participation.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ label: "First-time Yogi Boost", points: FIRST_TIME_YOGI_BOOST }),
+      ]),
+    );
+
+    // Yogi whose pending retreat date is in the future does NOT get the first-time boost
+    const futureRetreat = {
+      code: "R_FUTURE",
+      retreatType: "general",
+      date: new Date(Date.now() + 86400000 * 30), // 30 days in future
+    } as any;
+    const futurePendingYogi = {
+      attributes: { dob: "1990-01-01" },
+      expressionOfInterests: {
+        R1: { state: SelectionState.APPLIED, occurredAt: "2024-01-01" },
+        R_FUTURE: { state: SelectionState.PENDING, occurredAt: "2024-01-01" },
+      },
+      participation: {},
+    } as any;
+    const resFuturePending = getYogiSortScore(futurePendingYogi, [currentRetreat, futureRetreat], [], currentRetreat);
+    expect(resFuturePending.breakdown.participation.score).toBe(100);
+    expect(resFuturePending.breakdown.participation.items).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ label: "First-time Yogi Boost" }),
+      ]),
+    );
   });
 
   test("getYogiSortScore adds a boost if yogi indicated ordination intention within the last 2 years only based on ordinationIntentionSpecifiedOn", () => {

@@ -24,6 +24,7 @@
 .yogi-application-retreat {
   font-weight: bold;
   padding: 5px;
+  white-space: nowrap;
 }
 
 .yogi-application-state {
@@ -31,6 +32,7 @@
   border-bottom-right-radius: 10px;
   text-transform: uppercase;
   padding: 5px;
+  white-space: nowrap;
 }
 
 .yogi-application-state + .yogi-application-special-comment,
