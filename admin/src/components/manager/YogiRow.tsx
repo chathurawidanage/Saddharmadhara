@@ -58,6 +58,8 @@ const getReasonLabel = (reason: string) => {
       return "Health issues";
     case "AGE_CONCERNS":
       return "Age concerns";
+    case "ELIGIBILITY_NOT_MET":
+      return "Eligibility Not Met";
     case "OTHER":
       return "Other";
     default:

@@ -458,16 +458,16 @@ describe("YogiList Sorting Helpers", () => {
 
     // Day 0: -20
     expect(calculateParticipationDecayDeduction(new Date(now))).toBe(-MAX_PARTICIPATION_DEDUCTION);
-    // 30 days: -18
-    expect(calculateParticipationDecayDeduction(new Date(now - 30 * dayMs))).toBe(-18);
-    // 90 days (3 months): -15
-    expect(calculateParticipationDecayDeduction(new Date(now - 90 * dayMs))).toBe(-15);
-    // 180 days (6 months): -11
-    expect(calculateParticipationDecayDeduction(new Date(now - 180 * dayMs))).toBe(-11);
-    // 365 days (1 year): -5
-    expect(calculateParticipationDecayDeduction(new Date(now - 365 * dayMs))).toBe(-5);
-    // 550 days (1.5 years): -1
-    expect(calculateParticipationDecayDeduction(new Date(now - 550 * dayMs))).toBe(-1);
+    // 30 days: -23 (with max 25)
+    expect(calculateParticipationDecayDeduction(new Date(now - 30 * dayMs))).toBe(-23);
+    // 90 days (3 months): -19 (with max 25)
+    expect(calculateParticipationDecayDeduction(new Date(now - 90 * dayMs))).toBe(-19);
+    // 180 days (6 months): -14 (with max 25)
+    expect(calculateParticipationDecayDeduction(new Date(now - 180 * dayMs))).toBe(-14);
+    // 365 days (1 year): -6 (with max 25)
+    expect(calculateParticipationDecayDeduction(new Date(now - 365 * dayMs))).toBe(-6);
+    // 550 days (1.5 years): -2 (with max 25)
+    expect(calculateParticipationDecayDeduction(new Date(now - 550 * dayMs))).toBe(-2);
     // 730 days (2 years): 0
     expect(calculateParticipationDecayDeduction(new Date(now - 730 * dayMs))).toBe(0);
     // Beyond 2 years: 0
@@ -488,14 +488,14 @@ describe("YogiList Sorting Helpers", () => {
       code: "ATT_SILENT_1",
       retreatType: "silent",
       retreatCode: "5SS28",
-      date: new Date(now - 90 * dayMs), // 3 months ago: -15
+      date: new Date(now - 90 * dayMs), // 3 months ago: -19 (with max 25)
     } as any;
 
     const attendedSilent2 = {
       code: "ATT_SILENT_2",
       retreatType: "silent",
       retreatCode: "5SS21",
-      date: new Date(now - 365 * dayMs), // 1 year ago: -5
+      date: new Date(now - 365 * dayMs), // 1 year ago: -6 (with max 25)
     } as any;
 
     const yogi = {
@@ -512,12 +512,12 @@ describe("YogiList Sorting Helpers", () => {
     const allRetreats = [currentSilentRetreat, attendedSilent1, attendedSilent2];
     const result = getYogiSortScore(yogi, allRetreats, [], currentSilentRetreat);
 
-    // base 100 + (-15 from ATT_SILENT_1) + (-5 from ATT_SILENT_2) = 80
-    expect(result.breakdown.participation.score).toBe(80);
+    // base 100 + (-19 from ATT_SILENT_1) + (-6 from ATT_SILENT_2) = 75
+    expect(result.breakdown.participation.score).toBe(75);
     expect(result.breakdown.participation.items).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ label: "Attended Silent (5SS28)", points: -15, type: "deduction" }),
-        expect.objectContaining({ label: "Attended Silent (5SS21)", points: -5, type: "deduction" }),
+        expect.objectContaining({ label: "Attended Silent (5SS28)", points: -19, type: "deduction" }),
+        expect.objectContaining({ label: "Attended Silent (5SS21)", points: -6, type: "deduction" }),
       ]),
     );
   });
@@ -544,7 +544,7 @@ describe("YogiList Sorting Helpers", () => {
       code: "PAST_SILENT",
       retreatType: "silent",
       retreatCode: "5SS28",
-      date: new Date(now - 90 * dayMs), // 3 months ago: -15
+      date: new Date(now - 90 * dayMs), // 3 months ago: -19 (with max 25)
       endDate: new Date(now - 85 * dayMs),
     } as any;
 
@@ -562,12 +562,12 @@ describe("YogiList Sorting Helpers", () => {
     const allRetreats = [currentRetreat, pastDhammaSeva, pastSilent];
     const result = getYogiSortScore(yogi, allRetreats, [], currentRetreat);
 
-    // Dhamma Seva boost (+100) + base 100 + deduction for past silent (-15) = 185
-    expect(result.breakdown.participation.score).toBe(100 + DHAMMA_SEVA_BOOST - 15);
+    // Dhamma Seva boost (+100) + base 100 + deduction for past silent (-19) = 181
+    expect(result.breakdown.participation.score).toBe(100 + DHAMMA_SEVA_BOOST - 19);
     expect(result.breakdown.participation.items).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ label: "Dhamma Seva Boost", points: DHAMMA_SEVA_BOOST }),
-        expect.objectContaining({ label: "Attended Silent (5SS28)", points: -15, type: "deduction" }),
+        expect.objectContaining({ label: "Attended Silent (5SS28)", points: -19, type: "deduction" }),
       ]),
     );
 
