@@ -2,9 +2,12 @@ const fs = require("fs");
 const path = require("path");
 const xlsx = require("xlsx");
 
-// Attempt to load .env file right next to this script
+// Attempt to load .env file right next to this script or application/.env.local
 function loadEnv() {
-  const envPaths = [path.join(__dirname, ".env")];
+  const envPaths = [
+    path.join(__dirname, ".env"),
+    path.join(__dirname, "../../application/.env.local"),
+  ];
 
   for (const envPath of envPaths) {
     if (fs.existsSync(envPath)) {
@@ -35,8 +38,14 @@ loadEnv();
 
 const DHIS2_ENDPOINT =
   process.env.DHIS2_ENDPOINT || "https://manager.srisambuddhamission.org/api/";
-const DHIS2_TOKEN =
-  process.env.DHIS2_TOKEN || "d2pat_RQxdVACNuB9nAvnBFaYeD9BQsh12bCyS0759501471";
+const DHIS2_TOKEN = process.env.DHIS2_TOKEN;
+
+if (!DHIS2_TOKEN) {
+  console.error(
+    "Error: DHIS2_TOKEN is not defined in environment or .env files."
+  );
+  process.exit(1);
+}
 const DHIS2_PROGRAM = "KdYt2OP9VjD";
 
 // Attribute UIDs

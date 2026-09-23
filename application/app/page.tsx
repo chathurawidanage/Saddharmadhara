@@ -7,6 +7,5 @@ export default async function Page({
 }) {
   const { retreat } = await searchParams;
   const retreatString = Array.isArray(retreat) ? retreat[0] : retreat;
-  console.log(retreatString);
   return <Application retreat={retreatString} />;
 }

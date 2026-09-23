@@ -8,7 +8,14 @@ junk
 
 .yarn
 
+# Environment variables and secrets
 .env
+.env*
+*.env
+*.env.*
+*.local
+*.pem
+*.key
 
 __pycache__/
 .py[cod]

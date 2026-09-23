@@ -46,12 +46,9 @@ export default function Confirm({
         ...surveyJson,
         pages: [...surveyJson.pages, attendance(retreatObj, teiName)],
       }),
-    [expressionOfInterestEvent, retreatObj],
+    [expressionOfInterestEvent, retreatObj, teiName],
   );
   const [loading, setLoading] = useState(true);
-
-  const [attending, setAttending] = useState(false);
-  const [accommodationDenied, setAccommodationDenied] = useState(false);
 
   useEffect(() => {
     survey.setLoading = setLoading;
@@ -60,20 +57,11 @@ export default function Confirm({
     setLoading(false);
   }, [survey, retreatObj]);
 
-  const onValueChanged = (survey: SurveyModel, options) => {
-    if (survey.data) {
-      if (survey.data.RSVP) {
-        setAttending(survey.data.RSVP);
-      }
-
-      if (survey.data.AccommodationDenied) {
-        setAccommodationDenied(survey.data.AccommodationDenied);
-      }
-    }
-  };
-
-  const onComplete = async (survey: SurveyModel, options) => {
+  const onComplete = async (survey: SurveyModel, options: any) => {
+    options.showSaveInProgress();
     try {
+      const attending = survey.data?.RSVP === true;
+      const accommodationDenied = survey.data?.AccommodationDenied === true;
       const saved = await confirmAttendance(
         expressionOfInterestEvent,
         attending,
@@ -93,13 +81,7 @@ export default function Confirm({
   return (
     <div className="App">
       <Loader visible={loading} />
-      {!loading && (
-        <Survey
-          model={survey}
-          onValueChanged={onValueChanged}
-          onComplete={onComplete}
-        />
-      )}
+      {!loading && <Survey model={survey} onComplete={onComplete} />}
     </div>
   );
 }

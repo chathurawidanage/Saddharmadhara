@@ -25,24 +25,53 @@ const visiblePageNamesForExistingYogis = new Set([
 ]);
 
 const searchExisting = ({ NIC, Passport }) => {
-  let checks = [
-    getExistingEnrollment(
-      SURVEY_JS_NAME_TO_D2_TRACKED_ENTITY_ATTRIBUTES_MAP["Passport"],
-      Passport,
-    ),
-  ];
+  let checks = [];
 
-  if (NIC !== undefined) {
-    let nicInfo = lankaNic.infoNic(NIC);
-    if (nicInfo.isValidated) {
+  if (Passport !== undefined && typeof Passport === "string") {
+    const trimmedPassport = Passport.trim().replace(/\s+/g, "");
+    if (trimmedPassport) {
+      checks.push(
+        getExistingEnrollment(
+          SURVEY_JS_NAME_TO_D2_TRACKED_ENTITY_ATTRIBUTES_MAP["Passport"],
+          trimmedPassport,
+        ),
+      );
+    }
+  } else if (Passport) {
+    checks.push(
+      getExistingEnrollment(
+        SURVEY_JS_NAME_TO_D2_TRACKED_ENTITY_ATTRIBUTES_MAP["Passport"],
+        Passport,
+      ),
+    );
+  }
+
+  if (NIC !== undefined && typeof NIC === "string") {
+    const trimmedNic = NIC.trim().replace(/\s+/g, "");
+    const nicInfo = lankaNic.infoNic(trimmedNic);
+
+    if (nicInfo && nicInfo.isValidated) {
+      const oldBase = nicInfo.oldFormat.slice(0, 9);
+      const nicSearchValues = new Set([
+        nicInfo.newFormat,
+        `${oldBase}V`,
+        `${oldBase}X`,
+      ]);
+
+      for (const val of nicSearchValues) {
+        checks.push(
+          getExistingEnrollment(
+            SURVEY_JS_NAME_TO_D2_TRACKED_ENTITY_ATTRIBUTES_MAP["NIC"],
+            val,
+          ),
+        );
+      }
+    } else if (trimmedNic) {
+      // Fallback search for unvalidated/non-standard NICs
       checks.push(
         getExistingEnrollment(
           SURVEY_JS_NAME_TO_D2_TRACKED_ENTITY_ATTRIBUTES_MAP["NIC"],
-          nicInfo.newFormat,
-        ),
-        getExistingEnrollment(
-          SURVEY_JS_NAME_TO_D2_TRACKED_ENTITY_ATTRIBUTES_MAP["NIC"],
-          nicInfo.oldFormat,
+          trimmedNic,
         ),
       );
     }

@@ -174,7 +174,6 @@ export async function isAcceptingApplications() {
  * If a specific retreat is specified, this function looks up for the specific retreat just return that if the yogi is elligible.
  */
 export async function getEligibleRetreats(enrollment?: string, specificRetreat?: string) {
-  console.log("Specific retreat", specificRetreat);
   let optionSetUrl = new URL(
     "optionSets/" + DHIS2_RETREATS_OPTION_SET,
     dhis2Endpoint,
@@ -270,36 +269,66 @@ export async function confirmAttendance(
   url.searchParams.set("async", "false");
   url.searchParams.set("importStrategy", "UPDATE");
 
-  const dataValues = event.dataValues.filter(
-    (dv) => dv.dataElement !== DHIS2_RETREAT_SELECTION_STATE_DATA_ELEMENT,
-  );
+  const dataValues = event.dataValues
+    .filter(
+      (dv: any) =>
+        dv.dataElement !== DHIS2_RETREAT_SELECTION_STATE_DATA_ELEMENT &&
+        dv.dataElement !== DHIS2_RETREAT_DATA_ELEMENT_ACCOMMODATION_DENIED,
+    )
+    .map((dv: any) => ({
+      dataElement: dv.dataElement,
+      value: dv.value,
+    }));
 
-  let response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: dhis2Token,
-    },
-    body: JSON.stringify({
-      events: [
-        {
-          ...event,
-          dataValues: [
-            ...dataValues,
-            {
-              dataElement: DHIS2_RETREAT_SELECTION_STATE_DATA_ELEMENT,
-              value: attending ? "selected" : "unattending",
-            },
-            {
-              dataElement: DHIS2_RETREAT_DATA_ELEMENT_ACCOMMODATION_DENIED,
-              value: accommodationDenied ? "true" : "false",
-            },
-          ],
-        },
-      ],
-    }),
-  });
-  return response.ok;
+  try {
+    let response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: dhis2Token,
+      },
+      body: JSON.stringify({
+        events: [
+          {
+            event: event.event,
+            orgUnit: event.orgUnit,
+            program: event.program,
+            programStage: event.programStage,
+            trackedEntity: event.trackedEntity,
+            enrollment: event.enrollment,
+            status: event.status,
+            occurredAt: event.occurredAt,
+            scheduledAt: event.scheduledAt,
+            dataValues: [
+              ...dataValues,
+              {
+                dataElement: DHIS2_RETREAT_SELECTION_STATE_DATA_ELEMENT,
+                value: attending ? "selected" : "unattending",
+              },
+              {
+                dataElement: DHIS2_RETREAT_DATA_ELEMENT_ACCOMMODATION_DENIED,
+                value: accommodationDenied ? "true" : "false",
+              },
+            ],
+          },
+        ],
+      }),
+    });
+
+    const responseJson = await response.json();
+    if (!response.ok || responseJson?.status === "ERROR") {
+      console.error(
+        "Failed to update attendance event in DHIS2:",
+        response.status,
+        responseJson,
+      );
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.error("Error confirming attendance in DHIS2:", error);
+    return false;
+  }
 }
 
 function flattenRetreatOption(option) {

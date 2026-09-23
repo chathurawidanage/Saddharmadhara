@@ -12,6 +12,7 @@ const Loader = (props: { visible: boolean }) => {
               alt="loading"
               width={96}
               height={67}
+              unoptimized
               style={{
                 height: "auto",
               }}

@@ -31,6 +31,7 @@ import "./YogiRow.css";
 import { Retreat, Yogi, EoiSummary, MaritalState, SelectionState } from "../../types/domain";
 import { getYogiSortScore } from "../../utils/yogiUtils";
 import { YogiScoreTooltip } from "./YogiScoreTooltip";
+import { DENY_REASON_MAP, DISCRETIONARY_REASON_MAP } from "./YogiRowActions";
 
 interface YogiRowProps {
   trackedEntity: Yogi;
@@ -41,50 +42,11 @@ interface YogiRowProps {
 }
 
 const getReasonLabel = (reason: string) => {
-  switch (reason) {
-    case "PAST_REVIEW":
-      return "Based on past staff review (eg: inappropriate behavior)";
-    case "DISCIPLINARY_CONCERNS":
-      return "Possible disciplinary or behavioral concerns";
-    case "TOO_MANY_NO_SHOWS":
-      return "Too many no shows across past years";
-    case "TOO_MANY_PARTICIPATIONS":
-      return "Too many participations across past retreats";
-    case "OUTSIDE_COMMUNICATION":
-      return "Already known to be not attending based on outside communication";
-    case "READINESS_ANSWERS":
-      return "Based on the answers to the questions Physical & Psychological Readiness.";
-    case "HEALTH_ISSUES":
-      return "Health issues";
-    case "AGE_CONCERNS":
-      return "Age concerns";
-    case "ELIGIBILITY_NOT_MET":
-      return "Eligibility Not Met";
-    case "OTHER":
-      return "Other";
-    default:
-      return reason;
-  }
+  return DENY_REASON_MAP[reason] || reason;
 };
 
 const getDiscretionaryReasonLabel = (reason: string) => {
-  switch (reason) {
-    case "MONASTIC_RECOMMENDATION":
-    case "MONASTIC_REQUEST":
-      return "Monastic / Reverend Recommendation";
-    case "MISSION_VOLUNTEER":
-    case "OPS_VOLUNTEER":
-      return "Mission / Retreat Volunteer";
-    case "SERIOUS_PRACTITIONER":
-      return "Serious Practitioner";
-    case "EXCEPTIONAL_ADMIN_CASE":
-    case "EMERGENCY_CASE":
-      return "Exceptional Administrative Case";
-    case "OTHER":
-      return "Other";
-    default:
-      return reason;
-  }
+  return DISCRETIONARY_REASON_MAP[reason] || reason;
 };
 
 const YogiRow = observer(({ trackedEntity, currentRetreat, allRetreats, eoiSummary, actions }: YogiRowProps) => {

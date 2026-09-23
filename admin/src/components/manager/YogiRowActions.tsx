@@ -24,6 +24,38 @@ import {
 import { useStore } from "../../stores/StoreProvider";
 import { Retreat, SelectionState, InvitationState, Yogi } from "../../types/domain";
 
+export const DENY_OPTIONS = [
+  { label: "Based on past staff review (eg: inappropriate behavior)", value: "PAST_REVIEW" },
+  { label: "Possible disciplinary or behavioral concerns", value: "DISCIPLINARY_CONCERNS" },
+  { label: "Too many no shows across past years", value: "TOO_MANY_NO_SHOWS" },
+  { label: "Too many participations across past retreats", value: "TOO_MANY_PARTICIPATIONS" },
+  { label: "Already known to be not attending based on outside communication", value: "OUTSIDE_COMMUNICATION" },
+  { label: "Based on the answers to the questions Physical & Psychological Readiness.", value: "READINESS_ANSWERS" },
+  { label: "Health issues", value: "HEALTH_ISSUES" },
+  { label: "Age concerns", value: "AGE_CONCERNS" },
+  { label: "Eligibility Not Met", value: "ELIGIBILITY_NOT_MET" },
+  { label: "Other", value: "OTHER" },
+];
+
+export const DENY_REASON_MAP: Record<string, string> = Object.fromEntries(
+  DENY_OPTIONS.map((opt) => [opt.value, opt.label]),
+);
+
+export const DISCRETIONARY_OPTIONS = [
+  { label: "Monastic / Reverend Recommendation", value: "MONASTIC_RECOMMENDATION" },
+  { label: "Mission / Retreat Volunteer", value: "MISSION_VOLUNTEER" },
+  { label: "Serious Practitioner", value: "SERIOUS_PRACTITIONER" },
+  { label: "Exceptional Administrative Case", value: "EXCEPTIONAL_ADMIN_CASE" },
+  { label: "Other", value: "OTHER" },
+];
+
+export const DISCRETIONARY_REASON_MAP: Record<string, string> = {
+  ...Object.fromEntries(DISCRETIONARY_OPTIONS.map((opt) => [opt.value, opt.label])),
+  MONASTIC_REQUEST: "Monastic / Reverend Recommendation", //legacy
+  OPS_VOLUNTEER: "Mission / Retreat Volunteer", // legacy
+  EMERGENCY_CASE: "Exceptional Administrative Case", //legacy
+};
+
 interface StateChangeButtonProps {
   currentState: string;
   yogi: Yogi;
@@ -35,7 +67,6 @@ export const StateChangeButton = observer(({ currentState, yogi, retreat, allYog
   const store = useStore();
   const [loading, setLoading] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [showDenyModal, setShowDenyModal] = useState(false);
   const [showDiscretionaryModal, setShowDiscretionaryModal] = useState(false);
   const [targetDiscretionaryState, setTargetDiscretionaryState] = useState<SelectionState>(SelectionState.PENDING);
   const [selectedReason, setSelectedReason] = useState("");
@@ -66,7 +97,7 @@ export const StateChangeButton = observer(({ currentState, yogi, retreat, allYog
       permanent: true,
       actions: [
         { label: "Move", onClick: onMoveClicked },
-        { label: "Don't Move", onClick: () => {} },
+        { label: "Don't Move", onClick: () => { } },
       ],
     }),
   );
@@ -114,41 +145,6 @@ export const StateChangeButton = observer(({ currentState, yogi, retreat, allYog
     }
   };
 
-  const handleDenyConfirm = async () => {
-    if (!selectedReason) return;
-    if (selectedReason === "OTHER" && !comment.trim()) return;
-
-    setLoading(true);
-    const feedbackSaved = await store.yogis?.saveProposedDenyFeedback(
-      retreat.code,
-      yogi.id,
-      selectedReason,
-      comment,
-      store.metadata?.currentUser?.username,
-    );
-
-    if (!feedbackSaved) {
-      setLoading(false);
-      alertError("Failed to save deny feedback to DHIS2 datastore. Please try again.");
-      return;
-    }
-
-    const success = await store.yogis?.changeRetreatState(
-      yogi.id,
-      retreat.code,
-      SelectionState.DESELECTED,
-    );
-
-    setLoading(false);
-    setShowDenyModal(false);
-
-    alertStateChangeStatus({
-      yogiName: yogi.attributes.fullName,
-      toState: SelectionState.DESELECTED,
-      success,
-    });
-  };
-
   const handleDiscretionaryConfirm = async () => {
     if (!selectedReason) return;
     if (selectedReason === "OTHER" && !comment.trim()) return;
@@ -184,27 +180,6 @@ export const StateChangeButton = observer(({ currentState, yogi, retreat, allYog
       success,
     });
   };
-
-  const DENY_OPTIONS = [
-    { label: "Based on past staff review (eg: inappropriate behavior)", value: "PAST_REVIEW" },
-    { label: "Possible disciplinary or behavioral concerns", value: "DISCIPLINARY_CONCERNS" },
-    { label: "Too many no shows across past years", value: "TOO_MANY_NO_SHOWS" },
-    { label: "Too many participations across past retreats", value: "TOO_MANY_PARTICIPATIONS" },
-    { label: "Already known to be not attending based on outside communication", value: "OUTSIDE_COMMUNICATION" },
-    { label: "Based on the answers to the questions Physical & Psychological Readiness.", value: "READINESS_ANSWERS" },
-    { label: "Health issues", value: "HEALTH_ISSUES" },
-    { label: "Age concerns", value: "AGE_CONCERNS" },
-    { label: "Eligibility Not Met", value: "ELIGIBILITY_NOT_MET" },
-    { label: "Other", value: "OTHER" },
-  ];
-
-  const DISCRETIONARY_OPTIONS = [
-    { label: "Monastic / Reverend Recommendation", value: "MONASTIC_RECOMMENDATION" },
-    { label: "Mission / Retreat Volunteer", value: "MISSION_VOLUNTEER" },
-    { label: "Serious Practitioner", value: "SERIOUS_PRACTITIONER" },
-    { label: "Exceptional Administrative Case", value: "EXCEPTIONAL_ADMIN_CASE" },
-    { label: "Other", value: "OTHER" },
-  ];
 
   const getStateName = (code: string) => {
     const found = (store.metadata?.selectionStates || []).find(
@@ -315,56 +290,6 @@ export const StateChangeButton = observer(({ currentState, yogi, retreat, allYog
                   onClick={handleDiscretionaryConfirm}
                 >
                   Confirm Selection
-                </Button>
-              </ButtonStrip>
-            </ModalActions>
-          </Modal>
-        )}
-
-        {showDenyModal && (
-          <Modal hide={!showDenyModal}>
-            <ModalTitle>Disqualify / Deny {yogi.attributes.fullName}</ModalTitle>
-            <ModalContent>
-              <p style={{ margin: "0 0 15px 0", fontSize: "14px", color: "var(--color-grey-700)" }}>
-                Please specify why this applicant is unsuited for this retreat.
-              </p>
-              <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "20px" }}>
-                {DENY_OPTIONS.map((opt) => (
-                  <Radio
-                    key={opt.value}
-                    label={opt.label}
-                    value={opt.value}
-                    checked={selectedReason === opt.value}
-                    onChange={() => setSelectedReason(opt.value)}
-                    dense
-                  />
-                ))}
-              </div>
-              <TextAreaField
-                label="Comment"
-                value={comment}
-                onChange={({ value }: { value: string }) => setComment(value)}
-                required={selectedReason === "OTHER"}
-                validationText={
-                  selectedReason === "OTHER" && !comment.trim()
-                    ? "Comment is required when 'Other' is selected"
-                    : undefined
-                }
-                error={selectedReason === "OTHER" && !comment.trim()}
-              />
-            </ModalContent>
-            <ModalActions>
-              <ButtonStrip>
-                <Button onClick={() => setShowDenyModal(false)} secondary disabled={loading}>
-                  Cancel
-                </Button>
-                <Button
-                  destructive
-                  loading={loading}
-                  disabled={!selectedReason || (selectedReason === "OTHER" && !comment.trim())}
-                  onClick={handleDenyConfirm}
-                >
-                  Deny
                 </Button>
               </ButtonStrip>
             </ModalActions>
@@ -687,19 +612,6 @@ export const ProposedActions = observer(({ yogi, retreat }: ProposedActionsProps
     });
   };
 
-  const OPTIONS = [
-    { label: "Based on past staff review (eg: inappropriate behavior)", value: "PAST_REVIEW" },
-    { label: "Possible disciplinary or behavioral concerns", value: "DISCIPLINARY_CONCERNS" },
-    { label: "Too many no shows across past years", value: "TOO_MANY_NO_SHOWS" },
-    { label: "Too many participations across past retreats", value: "TOO_MANY_PARTICIPATIONS" },
-    { label: "Already known to be not attending based on outside communication", value: "OUTSIDE_COMMUNICATION" },
-    { label: "Based on the answers to the questions Physical & Psychological Readiness.", value: "READINESS_ANSWERS" },
-    { label: "Health issues", value: "HEALTH_ISSUES" },
-    { label: "Age concerns", value: "AGE_CONCERNS" },
-    { label: "Eligibility Not Met", value: "ELIGIBILITY_NOT_MET" },
-    { label: "Other", value: "OTHER" },
-  ];
-
   return (
     <ButtonStrip>
       <Button
@@ -725,7 +637,7 @@ export const ProposedActions = observer(({ yogi, retreat }: ProposedActionsProps
               Please tell us why you think this system proposal is invalid. This feedback will be used to improve the scoring algorithm.
             </p>
             <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "20px" }}>
-              {OPTIONS.map((opt) => (
+              {DENY_OPTIONS.map((opt) => (
                 <Radio
                   key={opt.value}
                   label={opt.label}
