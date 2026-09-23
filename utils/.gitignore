@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Environment files and secrets
+.env
+.env*
+*.env
+*.env.*
+*.local
+*.pem
+*.key
+
+# Data dumps and generated files containing PII (names, phone numbers, NICs, emails)
+*.json
+!package.json
+
+# Spreadsheets, exports and phone extraction outputs
+*.csv
+!sample_recipients.csv
+!**/sample_recipients.csv
+*.xlsx
+*.xls
+*.tsv
+
+# Text and log outputs
+*.txt
+*.log
+*.dump

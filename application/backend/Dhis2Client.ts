@@ -20,78 +20,111 @@ import {
 } from "../app/forms/dhis2";
 
 export async function getRetreatByCode(code: string) {
-  const optionsUrl = new URL(
-    "optionSets/" + DHIS2_RETREATS_OPTION_SET,
-    dhis2Endpoint,
-  );
-  optionsUrl.searchParams.set("fields", "options[code,name,attributeValues]");
-  const optionsResponse = await fetch(optionsUrl, {
-    method: "GET",
-    headers: {
-      Authorization: dhis2Token,
-    },
-  }).then((res) => res.json());
+  try {
+    const optionsUrl = new URL(
+      "optionSets/" + DHIS2_RETREATS_OPTION_SET,
+      dhis2Endpoint,
+    );
+    optionsUrl.searchParams.set("fields", "options[code,name,attributeValues]");
+    const res = await fetch(optionsUrl, {
+      method: "GET",
+      headers: {
+        Authorization: dhis2Token,
+      },
+    });
+    if (!res.ok) {
+      console.error(
+        `Failed to fetch retreat by code "${code}" from DHIS2:`,
+        res.status,
+        res.statusText,
+      );
+      return null;
+    }
+    const optionsResponse = await res.json();
+    const foundRetreat = optionsResponse?.options?.find(
+      (option: any) =>
+        option?.attributeValues?.find(
+          (attr: any) => attr?.attribute?.id === DHIS2_RETREAT_ATTRIBUTE_CODE,
+        )?.value === code,
+    );
 
-  const foundRetreat = optionsResponse?.options?.find(
-    (option) =>
-      option?.attributeValues?.find(
-        (attr) => attr?.attribute?.id === DHIS2_RETREAT_ATTRIBUTE_CODE,
-      )?.value === code,
-  );
-
-  if (foundRetreat) {
-    return flattenRetreatOption(foundRetreat);
+    if (foundRetreat) {
+      return flattenRetreatOption(foundRetreat);
+    }
+    return null;
+  } catch (error) {
+    console.error(`Error in getRetreatByCode("${code}"):`, error);
+    return null;
   }
-  return null;
 }
 
 export async function getExpressionOfInterestEvent(
   teiId: string,
   retreatCode: string,
 ) {
-  const trackedEntitiesUrl = new URL(
-    "tracker/trackedEntities/" + teiId,
-    dhis2Endpoint,
-  );
-  trackedEntitiesUrl.searchParams.set("fields", "enrollments[events]");
+  try {
+    const trackedEntitiesUrl = new URL(
+      "tracker/trackedEntities/" + teiId,
+      dhis2Endpoint,
+    );
+    trackedEntitiesUrl.searchParams.set("fields", "enrollments[events]");
 
-  const trackedEntitiesResponse = await fetch(trackedEntitiesUrl, {
-    method: "GET",
-    headers: {
-      Authorization: dhis2Token,
-    },
-  }).then((res) => res.json());
-
-  for (const event of trackedEntitiesResponse.enrollments[0].events) {
-    if (event?.programStage === DHIS2_EXPRESSION_OF_INTEREST_PROGRAM_STAGE) {
-      for (const dataValue of event.dataValues) {
-        if (
-          dataValue?.dataElement === DHIS2_RETREAT_DATA_ELEMENT &&
-          dataValue?.value === retreatCode
-        ) {
-          return event;
+    const res = await fetch(trackedEntitiesUrl, {
+      method: "GET",
+      headers: {
+        Authorization: dhis2Token,
+      },
+    });
+    if (!res.ok) {
+      console.error(
+        `Failed to fetch EOI event for TEI "${teiId}" from DHIS2:`,
+        res.status,
+        res.statusText,
+      );
+      return null;
+    }
+    const trackedEntitiesResponse = await res.json();
+    for (const event of trackedEntitiesResponse?.enrollments?.[0]?.events || []) {
+      if (event?.programStage === DHIS2_EXPRESSION_OF_INTEREST_PROGRAM_STAGE) {
+        for (const dataValue of event.dataValues || []) {
+          if (
+            dataValue?.dataElement === DHIS2_RETREAT_DATA_ELEMENT &&
+            dataValue?.value === retreatCode
+          ) {
+            return event;
+          }
         }
       }
     }
+    return null;
+  } catch (error) {
+    console.error(
+      `Error in getExpressionOfInterestEvent(teiId: "${teiId}", retreatCode: "${retreatCode}"):`,
+      error,
+    );
+    return null;
   }
-  return null;
 }
 
 export async function uploadFile(formData: FormData): Promise<string> {
-  return fetch(new URL("fileResources", dhis2Endpoint), {
-    method: "POST",
-    body: formData,
-    headers: {
-      Authorization: dhis2Token,
-    },
-  })
-    .then((response) => response.json())
-    .then((data) => {
-      if (data?.httpStatusCode !== 202) {
-        throw new Error("Failed to upload the file");
-      }
-      return data?.response?.fileResource?.id;
+  try {
+    const response = await fetch(new URL("fileResources", dhis2Endpoint), {
+      method: "POST",
+      body: formData,
+      headers: {
+        Authorization: dhis2Token,
+      },
     });
+    const data = await response.json().catch(() => null);
+    if (!response.ok || data?.httpStatusCode !== 202) {
+      console.error("Failed to upload file to DHIS2:", response.status, data);
+      throw new Error("Failed to upload the file");
+    }
+    return data?.response?.fileResource?.id;
+  } catch (error) {
+    console.error("Error uploading file to DHIS2:", error);
+    throw error;
+  }
 }
 
 export async function saveTrackerPayload(trackerPayload) {
@@ -107,9 +140,24 @@ export async function saveTrackerPayload(trackerPayload) {
       },
       body: JSON.stringify(trackerPayload),
     });
-    return response.ok;
+
+    const responseJson = await response.json().catch(() => null);
+    if (!response.ok || responseJson?.status === "ERROR") {
+      console.error(
+        "Failed to save tracker payload in DHIS2:",
+        response.status,
+        response.statusText,
+        JSON.stringify(
+          responseJson?.validationReport?.errorReports || responseJson,
+          null,
+          2,
+        ),
+      );
+      return false;
+    }
+    return true;
   } catch (error) {
-    console.error("Error in saving", error);
+    console.error("Error saving tracker payload in DHIS2:", error);
     return false;
   }
 }
@@ -242,21 +290,35 @@ export async function getExistingEnrollment(
   url.searchParams.set("ouMode", "ACCESSIBLE");
   url.searchParams.set("filter", attribute + ":eq:" + value);
 
-  let response = await fetch(url, {
-    method: "GET",
-    headers: {
-      Authorization: dhis2Token,
-    },
-  });
+  try {
+    let response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Authorization: dhis2Token,
+      },
+    });
 
-  let responseJson = await response.json();
-  if (
-    responseJson?.trackedEntityInstances?.[0]?.enrollments?.[0]?.enrollment !==
-    undefined
-  ) {
-    return responseJson.trackedEntityInstances[0].enrollments[0].enrollment;
-  } else {
-    return Promise.reject("No enrollment found for this attribute and value");
+    if (!response.ok) {
+      console.error(
+        `Failed to query existing enrollment for ${attribute}=${value}:`,
+        response.status,
+        response.statusText,
+      );
+      return Promise.reject(`DHIS2 error: ${response.status}`);
+    }
+
+    let responseJson = await response.json();
+    if (
+      responseJson?.trackedEntityInstances?.[0]?.enrollments?.[0]?.enrollment !==
+      undefined
+    ) {
+      return responseJson.trackedEntityInstances[0].enrollments[0].enrollment;
+    } else {
+      return Promise.reject("No enrollment found for this attribute and value");
+    }
+  } catch (error) {
+    console.error(`Error in getExistingEnrollment(${attribute}=${value}):`, error);
+    throw error;
   }
 }
 
@@ -315,12 +377,17 @@ export async function confirmAttendance(
       }),
     });
 
-    const responseJson = await response.json();
+    const responseJson = await response.json().catch(() => null);
     if (!response.ok || responseJson?.status === "ERROR") {
       console.error(
         "Failed to update attendance event in DHIS2:",
         response.status,
-        responseJson,
+        response.statusText,
+        JSON.stringify(
+          responseJson?.validationReport?.errorReports || responseJson,
+          null,
+          2,
+        ),
       );
       return false;
     }

@@ -19,3 +19,4 @@ junk
 
 __pycache__/
 .py[cod]
+*.tsbuildinfo
