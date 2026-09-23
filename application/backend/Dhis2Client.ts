@@ -130,6 +130,12 @@ export async function uploadFile(formData: FormData): Promise<string> {
 export async function saveTrackerPayload(trackerPayload) {
   // todo consider adding a captcha if we want to avoid spam
   try {
+    if (trackerPayload?.trackedEntities?.length > 0) {
+      console.log(
+        "First time yogi application payload:",
+        JSON.stringify(trackerPayload, null, 2),
+      );
+    }
     let trackerUrl = new URL("tracker", dhis2Endpoint);
     trackerUrl.searchParams.set("async", "false");
     let response = await fetch(trackerUrl, {
