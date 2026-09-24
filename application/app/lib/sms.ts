@@ -57,19 +57,7 @@ export async function saveTokenToDhis2(token: string, expiresAt: number) {
         esmsTokenEncryptionKey!,
     ).toString();
 
-    // delete existing token
-    const deleteResponse = await fetch(smsTokenStoreUrl, {
-        method: "DELETE",
-        headers: {
-            Authorization: dhis2AuthHeader,
-        },
-    });
-
-    if (!deleteResponse.ok) {
-        console.log("Failed to delete existing token", deleteResponse.status);
-    }
-
-    const response = await fetch(smsTokenStoreUrl, {
+    let response = await fetch(smsTokenStoreUrl, {
         method: "PUT",
         headers: {
             "Content-Type": "application/json",
@@ -78,9 +66,21 @@ export async function saveTokenToDhis2(token: string, expiresAt: number) {
         body: JSON.stringify({ token: encryptedToken, expiresAt }),
     });
 
+    // If key does not exist yet in DataStore, create it with POST
+    if (response.status === 404) {
+        response = await fetch(smsTokenStoreUrl, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: dhis2AuthHeader,
+            },
+            body: JSON.stringify({ token: encryptedToken, expiresAt }),
+        });
+    }
+
     if (!response.ok) {
         const errorText = await response.text();
-        console.error("Failed to save token to DHIS2:", errorText, deleteResponse.status);
+        console.error("Failed to save token to DHIS2:", errorText, response.status);
         throw new Error(`Failed to save token to DHIS2: ${errorText}`);
     }
 }
